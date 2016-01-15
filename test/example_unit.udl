@@ -10,9 +10,14 @@ stats:
   -faint_threshold: 15
   -movement_cost: 2
   -type: faction
-weapons:
-  -standard_rifle
-  -custom_weapon
-  -custom_expendable_weapon
-    ammo: 5
-    
+weapons: 
+  -standard_rifle: standard_rifle # a.k.a Made in China
+  -custom_weapon: NonCustomPistol
+  -custom_expendable_weapon: Gernada
+  -ammo: 5
+  #these all must be defined or the ammo declaration wont work
+  # So If I put
+ #-SomeVar
+ #-ImportantVar: 10
+ #This will error out, because 'SomeVar' was not declared, making 'ImportantVar' not able to be declared. (I think) 
+ #Now you could move 'ImportantVar' above 'SomeVar' and this would work too

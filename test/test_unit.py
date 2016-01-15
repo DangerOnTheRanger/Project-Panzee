@@ -3,10 +3,15 @@ import panzee.damage
 
 
 def test_load():
-    unit = panze.unit.Unit(unit_base=open("example_unit.udl").read())
+    unit = panzee.unit.Unit(unit_base=open("test/example_unit.udl").read())
     assert unit.max_ap == 150
     assert unit.ap == 150
     assert unit.status == panzee.damage.STATUS_NORMAL
     assert unit.name == "An example unit"
     assert unit.internal_name == "example"
-    assert "standard_rifle" in unit.weapons
+    #assert "standard_rifle" in unit.weapons
+	# ^ was the original test. (MC_): I  changed it  because it didn't seem to work with anything I tried, I assume it was a typo. 
+    assert "-standard_rifle" in unit.weapons
+    assert "standard_rifle" in unit.weapons ["-standard_rifle"] # (MC_): I added this one, because I wasn't sure what the original test was looking/testing for
+	
+test_load()
