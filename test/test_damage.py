@@ -6,11 +6,11 @@ def test_stats_default_values():
     assert stats.damage_reduction == 0.0
     assert stats.max_ap == 100
     assert stats.faint_threshold == 20
-	
+
 def test_stats_constructor():
     stats = panzee.damage.ModelStats(
         movement_cost=3,
-        dr=0.15
+        damage_reduction=0.15
     )
     assert stats.movement_cost == 3
     assert stats.damage_reduction == 0.15
@@ -97,7 +97,3 @@ def test_performable_action():
     # Can't perform an action that would cause fainting
     assert model.can_perform_action_with_cost(10) == False
     assert model.can_perform_action_with_cost(3) == True
-
-	
-test_stats_default_values()
-test_stats_constructor()	

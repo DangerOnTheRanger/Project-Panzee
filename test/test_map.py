@@ -27,7 +27,3 @@ class MockMap(object):
 
     def get_cell(self, i, j):
         return self.map_data[i][j]
-
-
-def gen_mock_map():
-    pass
