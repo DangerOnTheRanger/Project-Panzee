@@ -4,6 +4,8 @@ import panzee.damage
 class Unit(panzee.damage.ModelStats):
 	name = "An example unit"
 	weapons = ""
+	status = panzee.damage.STATUS_NORMAL
+	internal_name = "example"
 	def __init__(self,unit_base=None):
 		if(unit_base==None):
 			print "Nothing to see here"

@@ -1,4 +1,8 @@
-import panzee.map
+from cocos.director import director
+from cocos import layer
+
+import panzee.mapUtils
+import cocos
 
 
 class MockCell(object):
@@ -17,7 +21,6 @@ class MockCell(object):
     def get(self, key, default=None):
         return self.properties.get(key, default)
 
-
 class MockMap(object):
     """Mock a cocos2d tile map for testing purposes.
     Implements solely get_cell and __getitem__.
@@ -27,3 +30,18 @@ class MockMap(object):
 
     def get_cell(self, i, j):
         return self.map_data[i][j]
+
+		
+def test_this():
+	cocos.director.director.init(width=600, height=600, caption="Project Panzee")
+	cocos.director.director.set_show_FPS(True)
+	map = panzee.mapUtils.loadMap("map.tmx")
+	manager = cocos.layer.ScrollingManager()
+	manager.set_focus(0, 0)
+	ls = list(map.find(cocos.layer.base_layers.Layer))
+	for i in range (0,len(ls)):
+		manager.add(map[ls[i][0]])
+	main_scene = cocos.scene.Scene(manager)
+	cocos.director.director.run (main_scene)
+	
+	
