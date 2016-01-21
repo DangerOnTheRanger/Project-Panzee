@@ -1,2 +1,4 @@
 # Ignore Python bytecode
 *.pyc
+TEST.cmd
+test.py

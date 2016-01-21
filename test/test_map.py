@@ -31,17 +31,28 @@ class MockMap(object):
     def get_cell(self, i, j):
         return self.map_data[i][j]
 
-		
+        
 def test_this():
-	cocos.director.director.init(width=600, height=600, caption="Project Panzee")
-	cocos.director.director.set_show_FPS(True)
-	map = panzee.mapUtils.loadMap("map.tmx")
-	manager = cocos.layer.ScrollingManager()
-	manager.set_focus(0, 0)
-	ls = list(map.find(cocos.layer.base_layers.Layer))
-	for i in range (0,len(ls)):
-		manager.add(map[ls[i][0]])
-	main_scene = cocos.scene.Scene(manager)
-	cocos.director.director.run (main_scene)
-	
-	
+    cocos.director.director.init(width=600, height=600, caption="Project Panzee")
+    cocos.director.director.set_show_FPS(True)
+    map = panzee.mapUtils.loadMap("map.tmx")
+    manager = cocos.layer.ScrollingManager()
+    manager.set_focus(0, 0)
+    layers = list(map.find(cocos.layer.base_layers.Layer))
+    for i in range (0,len(layers)):
+        manager.add(map[layers[i][0]])
+    main_scene = cocos.scene.Scene(manager)
+    '''
+    print( layers[3][0],", ", map["Floor"].get_cell(0,0) )
+    layer1 = map[layers[0][0]].cells
+    layer2 = map[layers[1][0]].cells
+    for i in range (0,len(layer1)):
+        for t in range (0,len(layer1[i])):
+            #print layer1[i][t].__dict__
+            #layer1[i][t]["Passable"]=False
+            print panzee.mapUtils.getCellProperty(layer1[i][t],"Passable")
+        
+    '''
+    cocos.director.director.run (main_scene)
+    
+    
