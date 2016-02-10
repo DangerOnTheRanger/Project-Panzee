@@ -74,4 +74,25 @@ Background example:
     We can also remove backgrounds similar to actors.
     [background none]
     And now the screen is black again.
-    
+
+
+Avatars
+-------
+
+Most visual novel engines include support for not only backgrounds, but for foreground
+sprites representing various characters, as well. Panzee's NMF engine does this through
+the use of what it calls avatars. Each actor can be assigned an avatar, which contains
+info on what sprites constitute an actor's appearance, as well as its current position
+on the screen. Avatars are defined in a separate folder, one for each actor.
+
+An avatar folder looks like this:
+
+    /
+      neutral.png
+      surprised.png
+      sad.png
+      happy.png
+      avatar.nav
+
+The NMF engine automatically finds and detects any image files in the avatar folder.
+The names of those image files can then be referenced to change the avatar's appearance. 
