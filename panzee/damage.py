@@ -1,27 +1,55 @@
-STATUS_NORMAL = "Good"
-class ModelStats:
-	faint_threshold = 20 #This is a static variable, because it has been defined outside of any function in this class
-	ap = 150 #actionpoints
-	def __init__(self, movement_cost=None, damage_reduction=None, ma=None, ft=None):
-		if movement_cost is None: # Have to be carful about have a 'arg' the same name as a class instance variable
+STATUS_NORMAL, STATUS_FAINTED, STATUS_DEAD = range(3)
+
+
+class ModelStats(object):
+	faint_threshold = 20
+	action_points = 150
+	def __init__(self, movement_cost=None, damage_reduction=None, max_ap=None, faint_threshold=None):
+		if movement_cost is None:
 			self.movement_cost = 1
 		else:
 			self.movement_cost = movement_cost
 
 		if damage_reduction is None:
 			self.damage_reduction = 0.0
-			#     ^ this is a class instance variable, because it has been defined as an atribute of 'self' meaning the class instance that is this function
 		else:
 			self.damage_reduction = damage_reduction
 
-		if ma is None:
+		if max_ap is None:
 			self.max_ap = 100
-			# max_ap = 100
-			# ^ this is a local variable and will not work for the case, since local variables are deleted after the function it's been declared in exits/ends
 		else:
-			self.max_ap = ma
+			self.max_ap = max_ap
 
-		if ft is None:
-			self.ma = 20
+		if faint_threshold is None:
+			self.faint_threshold = 20
 		else:
-			self.faint_threshold = ft
+			self.faint_threshold = faint_threshold
+
+
+class DamageModel(object):
+
+	def __init__(self, stats):
+		self.stats = stats
+		self.status = STATUS_NORMAL
+		self.ap = self.stats.max_ap
+
+	def calculate_movement_cost(self, distance):
+		return self.stats.movement_cost * distance
+
+	def take_damage_for_movement(self, distance):
+		self.ap -= self.calculate_movement_cost(distance)
+
+	def calculate_damage_taken(self, base_damage):
+		return base_damage * (1.0 - self.stats.damage_reduction)
+
+	def take_damage(self, base_damage):
+		self.ap -= self.calculate_damage_taken(base_damage)
+		if self.ap <= self.stats.faint_threshold:
+			self.status = STATUS_FAINTED
+		if self.ap < 0:
+			self.ap = 0
+		if self.ap == 0:
+			self.status = STATUS_DEAD
+
+	def can_perform_action_with_cost(self, cost):
+		return not self.ap - cost <= self.stats.faint_threshold
