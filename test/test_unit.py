@@ -12,9 +12,8 @@ def test_load():
     #assert "standard_rifle" in unit.weapons
 	# ^ was the original test. (MC_): I changed it because it didn't seem to
     # work with anything I tried, I assume it was a typo.
-    assert "-standard_rifle" in unit.weapons
+    assert "standard_rifle" in unit.weapons
     # (MC_): I added this one, because I wasn't sure what the original test was looking/testing for
-    assert "standard_rifle" in unit.weapons ["-standard_rifle"]
 
 
 def test_calculations():
