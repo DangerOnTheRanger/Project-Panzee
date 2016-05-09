@@ -1,0 +1,4 @@
+[set test_flag 1]
+[set other_flag bla]
+[set another_flag]
+[unset another_flag]
