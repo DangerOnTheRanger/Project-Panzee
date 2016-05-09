@@ -193,9 +193,9 @@ the flags and `if/then` sequences discussed earlier.
     We must give the name of a flag to pass the result of the decision tree into.
     Which choice will you pick?
     [tree choice]
-    The first choice.
-    The second choice.
-    The third choice.
+    [leaf The first choice.]
+    [leaf The second choice.]
+    [leaf The third choice.]
     [endtree]
     [if choice 1]
     You picked the first choice.
@@ -204,3 +204,7 @@ the flags and `if/then` sequences discussed earlier.
     [else]
     You picked the third choice.
     [endif]
+
+As an interesting sidenote, it is perfectly valid to use `[if]` and other statements
+inside a `[tree]` declaration, meaning it's possible to create different choices based
+on the status of flags.
