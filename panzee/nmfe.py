@@ -398,7 +398,7 @@ class ElseifCommand(IfCommand):
 
     def execute(self):
         if self._previous_cmp_succeeded():
-            return
+            self._attempt_jump_to(EndifCommand)
         else:
             super(ElseifCommand, self).execute()
 
