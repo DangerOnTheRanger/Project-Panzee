@@ -248,12 +248,8 @@ def main():
         if runtime.can_step() is False and view.state is ConsoleView.IDLE:
             break
         if view.state is ConsoleView.IDLE:
-            try:
-                command = runtime.step()
-                command.execute()
-            except IndexError:
-                print runtime._index, len(runtime._commands)
-                sys.exit(1)
+            command = runtime.step()
+            command.execute()
         elif view.state is ConsoleView.WAIT_INPUT:
             while True:
                 char = getch()
