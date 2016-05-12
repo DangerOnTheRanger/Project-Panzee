@@ -1,21 +1,15 @@
 import copy
 
 
-class Runtime(object):
-
-    def __init__(self, view):
-        self._index = 0
-        self._commands = []
-        self._contexts = {}
-        self._next_cmd_index = 0
-        self._line_num = 0
+class Parser(object):
+    def __init__(self, starting_cmd_index=0, starting_cmp_id=0, starting_tree_id=0):
         self._lines = []
-        self._view = view
-        self._aliases = {}
-        self._flags = {}
-        self._next_cmp_id = 0
+        self._line_num = 0
+        self._commands = []
+        self._next_cmd_index = starting_cmd_index
+        self._next_cmp_id = starting_cmp_id
         self._expecting_endif = False
-        self._next_tree_id = 0
+        self._next_tree_id = starting_tree_id
         self._inside_tree = False
 
     def read(self, file_path):
@@ -23,55 +17,17 @@ class Runtime(object):
         while self._lines:
             self._parse_next_line()
 
-    def step(self):
-        command = self._commands[self._index]
-        #TODO: support jumping forward with context past last executed command?
-        self._save_context()
-        self._index += 1
-        return command
+    def get_commands(self):
+        return self._commands
 
-    def jump_to(self, index):
-        self._index = index
+    def get_cmd_index(self):
+        return self._next_cmd_index
 
-    def jump_with_context(self, index):
-        context_commands = self._get_context(index)["cmds"]
-        self._partial_restore_context(index)
-        self.jump_to(index)
-        self._view.restore_context(context_commands)
+    def get_cmp_id(self):
+        return self._next_cmp_id
 
-    def add_alias(self, alias, real_name):
-        self._aliases[alias] = real_name
-
-    def has_alias_for(self, alias):
-        return alias in self._aliases.keys()
-
-    def get_alias_for(self, alias):
-        return self._aliases[alias]
-
-    def set_flag(self, name, value):
-        self._flags[name] = self._autoconvert_flag_value(value)
-
-    def get_flag(self, name):
-        return self._flags[name]
-
-    def unset_flag(self, name):
-        del self._flags[name]
-
-    def has_flag(self, name):
-        return name in self._flags.keys()
-
-    def search_for_command(self, cmd_class, start_range = None, end_range = None):
-        if end_range is None:
-            cmd_slice = self._commands[start_range:]
-        elif start_range is None:
-            cmd_slice = self._commands
-        else:
-            cmd_slice = self._commands[start_range:-end_range]
-        results = []
-        for command in cmd_slice:
-            if type(command) == cmd_class:
-                results.append(command)
-        return results
+    def get_tree_id(self):
+        return self._next_tree_id
 
     def _read_next_line(self):
         line = self._lines.pop(0).strip("\n").lstrip(" ")
@@ -104,9 +60,9 @@ class Runtime(object):
                 dialogue = " ".join((dialogue, line))
             # remove final ~
             dialogue = dialogue[:-1]
-            self._add_command(DialogueCommand(dialogue, self, self._view, self._line_num, self._next_cmd_index))
+            self._add_command(DialogueCommand(dialogue, self._line_num, self._next_cmd_index))
         else:
-            self._add_command(DialogueCommand(line, self, self._view, self._line_num, self._next_cmd_index))
+            self._add_command(DialogueCommand(line, self._line_num, self._next_cmd_index))
 
     def _add_command(self, command):
         self._commands.append(command)
@@ -135,14 +91,14 @@ class Runtime(object):
         if name == "nobody":
             # remove the active speaker
             name = None
-        command = ActiveSpeakerCommand(name, self, self._view, self._line_num, self._next_cmd_index)
+        command = ActiveSpeakerCommand(name, self._line_num, self._next_cmd_index)
         return command
 
     def _construct_alias(self, args):
         if len(args) != 2:
             raise ParseException("Wrong number of arguments encountered on line %d" % self._line_num)
         alias, real_name = args[0], args[1]
-        command = AddAliasCommand(alias, real_name, self, self._view, self._line_num, self._next_cmd_index)
+        command = AddAliasCommand(alias, real_name, self._line_num, self._next_cmd_index)
         return command
 
     def _construct_set(self, args):
@@ -151,14 +107,23 @@ class Runtime(object):
         flag_val = None
         if len(args) > 1:
             flag_val = args[1]
-            flag_val = self._autoconvert_flag_value(flag_val)
-        command = SetFlagCommand(name, flag_val, self, self._view, self._line_num, self._next_cmd_index)
+            flag_val = autoconvert_flag_value(flag_val)
+        command = SetFlagCommand(name, flag_val, self._line_num, self._next_cmd_index)
         return command
 
     def _construct_unset(self, args):
         self._check_arg_size(args, 1, 1)
         name = args[0]
-        command = UnsetFlagCommand(name, self, self._view, self._line_num, self._next_cmd_index)
+        previous_unsets = search_for_command(self._commands, UnsetFlagCommand, _filter=lambda c: c.name == name)
+        previous_sets = search_for_command(self._commands, SetFlagCommand,  _filter=lambda c: c.name == name)
+        if not previous_sets:
+            raise ParseException('Attempt to use "unset" statement on nonexistent flag made on line %d' % self._line_num)
+        if previous_sets and previous_unsets:
+            last_set = previous_sets[-1:][0]
+            last_unset = previous_unsets[-1:][0]
+            if last_set.index < last_unset.index:
+                raise ParseException('Attempt to use "unset" statement on unset flag made on line %d' % self._line_num)
+        command = UnsetFlagCommand(name, self._line_num, self._next_cmd_index)
         return command
 
     def _construct_if(self, args):
@@ -170,8 +135,8 @@ class Runtime(object):
         value = None
         if len(args) > 1:
             value = args[1]
-            value = self._autoconvert_flag_value(value)
-        command = IfCommand(self._next_cmp_id, flag, value, self, self._view, self._line_num, self._next_cmd_index)
+            value = autoconvert_flag_value(value)
+        command = IfCommand(self._next_cmp_id, flag, value, self._line_num, self._next_cmd_index)
         return command
 
     def _construct_elseif(self, args):
@@ -182,15 +147,15 @@ class Runtime(object):
         value = None
         if len(args) > 1:
             value = args[1]
-            value = self._autoconvert_flag_value(value)
-        command = ElseifCommand(self._next_cmp_id, flag, value, self, self._view, self._line_num, self._next_cmd_index)
+            value = autoconvert_flag_value(value)
+        command = ElseifCommand(self._next_cmp_id, flag, value, self._line_num, self._next_cmd_index)
         return command
 
     def _construct_else(self, args):
         self._check_arg_size(args, 0, 0)
         if self._expecting_endif is False:
             raise ParseException('"else" statement found without matching "if" statement on line %d' % self._line_num)
-        command = ElseCommand(self._next_cmp_id, self, self._view, self._line_num, self._next_cmd_index)
+        command = ElseCommand(self._next_cmp_id, self._line_num, self._next_cmd_index)
         return command
 
     def _construct_endif(self, args):
@@ -198,7 +163,7 @@ class Runtime(object):
         if self._expecting_endif is False:
             raise ParseException('"endif" statement found without matching "if" statement on line %d' % self._line_num)
         self._expecting_endif = False
-        command = EndifCommand(self._next_cmp_id, self, self._view, self._line_num, self._next_cmd_index)
+        command = EndifCommand(self._next_cmp_id, self._line_num, self._next_cmd_index)
         self._next_cmp_id += 1
         return command
 
@@ -208,7 +173,7 @@ class Runtime(object):
             raise ParseException('Attempt to nest "tree" statements made on line %d' % self._line_num)
         self._inside_tree = True
         flag_name = args[0]
-        command = TreeCommand(self._next_tree_id, flag_name, self, self._view, self._line_num, self._next_cmd_index)
+        command = TreeCommand(self._next_tree_id, flag_name, self._line_num, self._next_cmd_index)
         return command
 
     def _construct_leaf(self, args):
@@ -217,7 +182,7 @@ class Runtime(object):
         if self._inside_tree is False:
             raise ParseException('Attempt to use "leaf" statement outside tree made on line %d' % self._line_num)
         text = " ".join(args)
-        command = LeafCommand(self._next_tree_id, text, self, self._view, self._line_num, self._next_cmd_index)
+        command = LeafCommand(self._next_tree_id, text, self._line_num, self._next_cmd_index)
         return command
 
     def _construct_endtree(self, args):
@@ -225,8 +190,8 @@ class Runtime(object):
         if self._inside_tree is False:
             raise ParseException('Attempt to use "endtree" statement outside of tree made on line %d' % self._line_num)
         self._inside_tree = False
-        display_command = DisplayTreeCommand(self._next_tree_id, self, self._view, self._line_num, self._next_cmd_index)
-        input_command = GetTreeInputCommand(self._next_tree_id, self, self._view, self._line_num, self._next_cmd_index)
+        display_command = DisplayTreeCommand(self._next_tree_id, self._line_num, self._next_cmd_index)
+        input_command = GetTreeInputCommand(self._next_tree_id, self._line_num, self._next_cmd_index)
         self._next_tree_id += 1
         # hacky fix to get around building two commands but having to return one
         self._add_command(display_command)
@@ -238,14 +203,75 @@ class Runtime(object):
         elif len(args) < low_end:
             raise ParseException("Too few arguments encountered on line %d" % self._line_num)
 
-    def _autoconvert_flag_value(self, value):
-        if value == None:
-            return value
-        elif type(value) == int:
-            return value
-        elif value.isdigit():
-            value = int(value)
-        return value
+
+class Runtime(object):
+
+    def __init__(self, view):
+        self._index = 0
+        self._commands = []
+        self._contexts = {}
+        self._next_cmd_index = 0
+        self._line_num = 0
+        self._lines = []
+        self._view = view
+        self._aliases = {}
+        self._flags = {}
+        self._next_cmp_id = 0
+        self._expecting_endif = False
+        self._next_tree_id = 0
+        self._inside_tree = False
+
+    def read(self, file_path):
+        parser = Parser()
+        parser.read(file_path)
+        self._commands = parser.get_commands()
+        for command in self._commands:
+            command.bind_to_runtime(self)
+            command.bind_to_view(self._view)
+
+    def step(self):
+        command = self._commands[self._index]
+        self._save_context()
+        self._index += 1
+        return command
+
+    def verify(self):
+        for command in self._commands:
+            command.verify()
+
+    def jump_to(self, index):
+        self._index = index
+
+    def jump_with_context(self, index):
+        context = self._get_context(index)
+        context_commands = context["cmds"]
+        self._partial_restore_context(context)
+        self.jump_to(index)
+        self._view.restore_context(context_commands)
+
+    def add_alias(self, alias, real_name):
+        self._aliases[alias] = real_name
+
+    def has_alias_for(self, alias):
+        return alias in self._aliases.keys()
+
+    def get_alias_for(self, alias):
+        return self._aliases[alias]
+
+    def set_flag(self, name, value):
+        self._flags[name] = autoconvert_flag_value(value)
+
+    def get_flag(self, name):
+        return self._flags[name]
+
+    def unset_flag(self, name):
+        del self._flags[name]
+
+    def has_flag(self, name):
+        return name in self._flags.keys()
+
+    def search_for_command(self, cmd_class, start_range = None, end_range = None, _filter=lambda c: True):
+        return search_for_command(self._commands, cmd_class, start_range, end_range, _filter)
 
     def _save_context(self):
         commands = {}
@@ -262,8 +288,7 @@ class Runtime(object):
     def _get_context(self, index):
         return self._contexts[index]
 
-    def _partial_restore_context(self, index):
-        context = self._contexts[index]
+    def _partial_restore_context(self, context):
         new_aliases = context["aliases"]
         new_flags = context["flags"]
         self._aliases = new_aliases
@@ -274,14 +299,18 @@ class ParseException(Exception):
     pass
 
 
+class VerifyException(Exception):
+    pass
+
+
 class RuntimeCommand(object):
 
     can_stop_at = False
     save_with_context = False
 
-    def __init__(self, runtime, view, line_num, index):
-        self.runtime = runtime
-        self.view = view
+    def __init__(self, line_num, index):
+        self.runtime = None
+        self.view = None
         self.line_num = line_num
         self.index = index
 
@@ -289,15 +318,21 @@ class RuntimeCommand(object):
         pass
 
     def verify(self):
-        return True
+        pass
+
+    def bind_to_runtime(self, runtime):
+        self.runtime = runtime
+
+    def bind_to_view(self, view):
+        self.view = view
 
 
 class DialogueCommand(RuntimeCommand):
 
     can_stop_at = True
 
-    def __init__(self, dialogue, runtime, view, line_num, index):
-        super(DialogueCommand, self).__init__(runtime, view, line_num, index)
+    def __init__(self, dialogue, line_num, index):
+        super(DialogueCommand, self).__init__(line_num, index)
         self._dialogue = dialogue
 
     def execute(self):
@@ -308,8 +343,8 @@ class ActiveSpeakerCommand(RuntimeCommand):
 
     save_with_context = True
 
-    def __init__(self, name, runtime, view, line_num, index):
-        super(ActiveSpeakerCommand, self).__init__(runtime, view, line_num, index)
+    def __init__(self, name, line_num, index):
+        super(ActiveSpeakerCommand, self).__init__(line_num, index)
         self._name = name
 
     def execute(self):
@@ -321,8 +356,8 @@ class ActiveSpeakerCommand(RuntimeCommand):
 
 class AddAliasCommand(RuntimeCommand):
 
-    def __init__(self, alias, real_name, runtime, view, line_num, index):
-        super(AddAliasCommand, self).__init__(runtime, view, line_num, index)
+    def __init__(self, alias, real_name, line_num, index):
+        super(AddAliasCommand, self).__init__(line_num, index)
         self._alias = alias
         self._real_name = real_name
 
@@ -332,29 +367,29 @@ class AddAliasCommand(RuntimeCommand):
 
 class SetFlagCommand(RuntimeCommand):
 
-    def __init__(self, name, value, runtime, view, line_num, index):
-        super(SetFlagCommand, self).__init__(runtime, view, line_num, index)
-        self._name = name
-        self._value = value
+    def __init__(self, name, value, line_num, index):
+        super(SetFlagCommand, self).__init__(line_num, index)
+        self.name = name
+        self.value = value
 
     def execute(self):
-        self.runtime.set_flag(self._name, self._value)
+        self.runtime.set_flag(self.name, self.value)
 
 
 class UnsetFlagCommand(RuntimeCommand):
 
-    def __init__(self, name, runtime, view, line_num, index):
-        super(UnsetFlagCommand, self).__init__(runtime, view, line_num, index)
-        self._name = name
+    def __init__(self, name, line_num, index):
+        super(UnsetFlagCommand, self).__init__(line_num, index)
+        self.name = name
 
     def execute(self):
-        self.runtime.unset_flag(self._name)
+        self.runtime.unset_flag(self.name)
 
 
 class IfCommand(RuntimeCommand):
 
-    def __init__(self, cmp_id, flag, cmp_val, runtime, view, line_num, index):
-        super(IfCommand, self).__init__(runtime, view, line_num, index)
+    def __init__(self, cmp_id, flag, cmp_val, line_num, index):
+        super(IfCommand, self).__init__(line_num, index)
         self.cmp_id = cmp_id
         self.flag = flag
         self.cmp_val = cmp_val
@@ -420,15 +455,15 @@ class ElseifCommand(IfCommand):
 
 class ElseCommand(RuntimeCommand):
 
-    def __init__(self, cmp_id, runtime, view, line_num, index):
-        super(ElseCommand, self).__init__(runtime, view, line_num, index)
+    def __init__(self, cmp_id, line_num, index):
+        super(ElseCommand, self).__init__(line_num, index)
         self.cmp_id = cmp_id
 
 
 class EndifCommand(RuntimeCommand):
 
-    def __init__(self, cmp_id, runtime, view, line_num, index):
-        super(EndifCommand, self).__init__(runtime, view, line_num, index)
+    def __init__(self, cmp_id, line_num, index):
+        super(EndifCommand, self).__init__(line_num, index)
         self.cmp_id = cmp_id
 
 
@@ -436,24 +471,24 @@ class TreeCommand(RuntimeCommand):
 
     can_stop_at = True
 
-    def __init__(self, tree_id, flag_name, runtime, view, line_num, index):
-        super(TreeCommand, self).__init__(runtime, view, line_num, index)
+    def __init__(self, tree_id, flag_name, line_num, index):
+        super(TreeCommand, self).__init__(line_num, index)
         self.tree_id = tree_id
         self.flag_name = flag_name
 
 
 class LeafCommand(RuntimeCommand):
 
-    def __init__(self, tree_id, choice_text, runtime, view, line_num, index):
-        super(LeafCommand, self).__init__(runtime, view, line_num, index)
+    def __init__(self, tree_id, choice_text, line_num, index):
+        super(LeafCommand, self).__init__(line_num, index)
         self.tree_id = tree_id
         self.choice_text = choice_text
 
 
 class DisplayTreeCommand(RuntimeCommand):
 
-    def __init__(self, tree_id, runtime, view, line_num, index):
-        super(DisplayTreeCommand, self).__init__(runtime, view, line_num, index)
+    def __init__(self, tree_id, line_num, index):
+        super(DisplayTreeCommand, self).__init__(line_num, index)
         self.tree_id = tree_id
 
     def execute(self):
@@ -472,8 +507,8 @@ class DisplayTreeCommand(RuntimeCommand):
 
 class GetTreeInputCommand(RuntimeCommand):
 
-    def __init__(self, tree_id, runtime, view, line_num, index):
-        super(GetTreeInputCommand, self).__init__(runtime, view, line_num, index)
+    def __init__(self, tree_id, line_num, index):
+        super(GetTreeInputCommand, self).__init__(line_num, index)
         self.tree_id = tree_id
 
     def execute(self):
@@ -484,3 +519,27 @@ class GetTreeInputCommand(RuntimeCommand):
     def _get_flag_name(self):
         tree = self.runtime.search_for_command(TreeCommand, end_range=self.index)[0]
         return tree.flag_name
+
+
+def autoconvert_flag_value(value):
+    if value == None:
+        return value
+    elif type(value) == int:
+        return value
+    elif value.isdigit():
+        value = int(value)
+    return value
+
+
+def search_for_command(commands, cmd_class, start_range=None, end_range=None, _filter=lambda c: True):
+    if end_range is None:
+        cmd_slice = commands[start_range:]
+    elif start_range is None:
+        cmd_slice = commands
+    else:
+        cmd_slice = commands[start_range:-end_range]
+    results = []
+    for command in cmd_slice:
+        if type(command) == cmd_class and _filter(command):
+            results.append(command)
+    return results
