@@ -20,13 +20,10 @@ class Parser(object):
     def get_commands(self):
         return self._commands
 
-    def get_cmd_index(self):
-        return self._next_cmd_index
-
-    def get_cmp_id(self):
+    def get_next_cmp_id(self):
         return self._next_cmp_id
 
-    def get_tree_id(self):
+    def get_next_tree_id(self):
         return self._next_tree_id
 
     def _read_next_line(self):
@@ -79,7 +76,8 @@ class Parser(object):
         'endif' : self._construct_endif,
         'tree' : self._construct_tree,
         'leaf' : self._construct_leaf,
-        'endtree' : self._construct_endtree}
+        'endtree' : self._construct_endtree,
+        'scene' : self._construct_scene}
         if tag not in handlers.keys():
             raise ParseException('Unknown command "%s" found on line %d' % (tag, self._line_num))
         return handlers[tag](args)
@@ -197,6 +195,21 @@ class Parser(object):
         self._add_command(display_command)
         return input_command
 
+    def _construct_scene(self, args):
+        self._check_arg_size(args, 1, float("inf"))
+        self._add_command(SaveContextCommand(self._line_num, self._next_cmd_index))
+        # handle spaces in scene file path
+        scene_path = ' '.join(args) + '.scn'
+        parser = Parser(self._next_cmd_index + 1, self._next_cmp_id + 1, self._next_tree_id + 1)
+        parser.read(scene_path)
+        for command in parser.get_commands():
+            self._add_command(command)
+        # _add_command takes care of incrementing the command index for us
+        self._next_cmp_id = parser.get_next_cmp_id()
+        self._next_tree_id = parser.get_next_tree_id()
+        restore_context_command = RestoreContextCommand(self._line_num, self._next_cmd_index)
+        return restore_context_command
+
     def _check_arg_size(self, args, low_end, high_end):
         if len(args) > high_end:
             raise ParseException("Too many arguments encountered on line %d" % self._line_num)
@@ -243,7 +256,7 @@ class Runtime(object):
         self._index = index
 
     def jump_with_context(self, index):
-        context = self._get_context(index)
+        context = self.get_context(index)
         context_commands = context["cmds"]
         self._partial_restore_context(context)
         self.jump_to(index)
@@ -273,6 +286,17 @@ class Runtime(object):
     def search_for_command(self, cmd_class, start_range = None, end_range = None, _filter=lambda c: True):
         return search_for_command(self._commands, cmd_class, start_range, end_range, _filter)
 
+    def get_context(self, index = None):
+        if index:
+            return self._contexts[index]
+        else:
+            return self._contexts[self._index]
+
+    def restore_context(self, context):
+        self._partial_restore_context(context)
+        context_commands = context["cmds"]
+        self._view.restore_context(context_commands)
+
     def _save_context(self):
         commands = {}
         # reversing the list causes the most recently-executed commmands to be considered first
@@ -284,9 +308,6 @@ class Runtime(object):
                 else:
                     continue
         self._contexts[self._index] = {"aliases" : copy.copy(self._aliases), "flags" : copy.copy(self._flags), "cmds" : commands.values()}
-
-    def _get_context(self, index):
-        return self._contexts[index]
 
     def _partial_restore_context(self, context):
         new_aliases = context["aliases"]
@@ -519,6 +540,24 @@ class GetTreeInputCommand(RuntimeCommand):
     def _get_flag_name(self):
         tree = self.runtime.search_for_command(TreeCommand, end_range=self.index)[0]
         return tree.flag_name
+
+
+class SaveContextCommand(RuntimeCommand):
+    # stub class, used as a marker when determining where to restore context after a scene
+    pass
+
+
+class RestoreContextCommand(RuntimeCommand):
+
+    def execute(self):
+        last_save = self._most_recent_save_context()
+        index = last_save.index
+        context = self.runtime.get_context(index)
+        self.runtime.restore_context(context)
+
+    def _most_recent_save_context(self):
+        candidates = self.runtime.search_for_command(SaveContextCommand, end_range=self.index)
+        return candidates[-1]
 
 
 def autoconvert_flag_value(value):
