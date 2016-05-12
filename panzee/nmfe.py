@@ -271,6 +271,9 @@ class Runtime(object):
             command.bind_to_runtime(self)
             command.bind_to_view(self._view)
 
+    def can_step(self):
+        return self._index < len(self._commands)
+
     def step(self):
         command = self._commands[self._index]
         self._save_context()
