@@ -223,16 +223,9 @@ class Runtime(object):
         self._index = 0
         self._commands = []
         self._contexts = {}
-        self._next_cmd_index = 0
-        self._line_num = 0
-        self._lines = []
         self._view = view
         self._aliases = {}
         self._flags = {}
-        self._next_cmp_id = 0
-        self._expecting_endif = False
-        self._next_tree_id = 0
-        self._inside_tree = False
 
     def read(self, file_path):
         parser = Parser()
