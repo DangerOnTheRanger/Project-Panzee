@@ -545,12 +545,22 @@ class RestoreContextCommand(RuntimeCommand):
     def execute(self):
         last_save = self._most_recent_save_context()
         index = last_save.index
-        context = self.runtime.get_context(index)
-        self.runtime.restore_context(context)
+        old_context = self.runtime.get_context(index)
+        current_context = self.runtime.get_context(self.index)
+        # merge contexts so as to save new aliases and flag values, but keep
+        # old actor information
+        merged_context = self._merge_contexts(old_context, current_context)
+        self.runtime.restore_context(merged_context)
 
     def _most_recent_save_context(self):
         candidates = self.runtime.search_for_command(SaveContextCommand, end_range=self.index)
         return candidates[-1]
+
+    def _merge_contexts(self, old_context, new_context):
+        merged_context = old_context.copy()
+        merged_context["aliases"].update(new_context["aliases"])
+        merged_context["flags"].update(new_context["flags"])
+        return merged_context
 
 
 def autoconvert_flag_value(value):

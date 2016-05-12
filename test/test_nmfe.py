@@ -63,6 +63,7 @@ class MockView(object):
         for command in commands:
             command.execute()
 
+
 def auto_step(runtime, num):
     for _ in range(0, num):
         command = runtime.step()
@@ -170,12 +171,14 @@ def test_scene():
     view = MockView()
     runtime = panzee.nmfe.Runtime(view)
     runtime.read("test/nmfe_test_data/test_scene_pt_1.scn")
-    auto_step(runtime, 2)
+    auto_step(runtime, 3)
     assert view.speaker == "Floyd"
     assert view.dialogue == "Let's transition to a scene."
-    auto_step(runtime, 3)
+    auto_step(runtime, 4)
     assert view.speaker == "Jermaine"
     assert view.dialogue == "This is Jermaine speaking."
     auto_step(runtime, 2)
     assert view.speaker == "Floyd"
     assert view.dialogue == "This is Floyd speaking again."
+    auto_step(runtime, 2)
+    assert view.dialogue == "The other scene set a flag."
