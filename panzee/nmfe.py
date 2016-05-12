@@ -11,6 +11,7 @@ class Parser(object):
         self._expecting_endif = False
         self._next_tree_id = starting_tree_id
         self._inside_tree = False
+        self._playing_audio = False
 
     def read(self, file_path):
         self._lines = open(file_path).readlines()
@@ -77,7 +78,10 @@ class Parser(object):
         'tree' : self._construct_tree,
         'leaf' : self._construct_leaf,
         'endtree' : self._construct_endtree,
-        'scene' : self._construct_scene}
+        'scene' : self._construct_scene,
+        'audio' : self._construct_playaudio,
+        'stopaudio' : self._construct_stopaudio,
+        'background' : self._construct_background}
         if tag not in handlers.keys():
             raise ParseException('Unknown command "%s" found on line %d' % (tag, self._line_num))
         return handlers[tag](args)
@@ -199,7 +203,7 @@ class Parser(object):
         self._check_arg_size(args, 1, float("inf"))
         self._add_command(SaveContextCommand(self._line_num, self._next_cmd_index))
         # handle spaces in scene file path
-        scene_path = ' '.join(args) + '.scn'
+        scene_path = self._path_from_args(args) + '.scn'
         parser = Parser(self._next_cmd_index + 1, self._next_cmp_id + 1, self._next_tree_id + 1)
         parser.read(scene_path)
         for command in parser.get_commands():
@@ -210,11 +214,43 @@ class Parser(object):
         restore_context_command = RestoreContextCommand(self._line_num, self._next_cmd_index)
         return restore_context_command
 
+    def _construct_playaudio(self, args):
+        self._check_arg_size(args, 1, float("inf"))
+        if self._playing_audio:
+            raise ParseException("Attempt to play audio without stopping previous track made on line %d" % self._line_num)
+        self._playing_audio = True
+        audio_path = self._path_from_args(args)
+        audio_command = PlayAudioCommand(audio_path, self._line_num, self._next_cmd_index)
+        return audio_command
+
+    def _construct_stopaudio(self, args):
+        self._check_arg_size(args, 0, 0)
+        if not self._playing_audio:
+            raise ParseException("Attempt to stop audio without playing any made on line %d" % self._line_num)
+        self._playing_audio = False
+        audio_command = StopAudioCommand(self._line_num, self._next_cmd_index)
+        return audio_command
+
+    def _construct_background(self, args):
+        self._check_arg_size(args, 1, 2)
+        # backgrounds can't have spaces in their name
+        background_path = args[0]
+        if background_path == "none":
+            background_path = None
+        transition = None
+        if len(args) > 1:
+            transition = args[1]
+        background_command = BackgroundCommand(background_path, transition, self._line_num, self._next_cmd_index)
+        return background_command
+
     def _check_arg_size(self, args, low_end, high_end):
         if len(args) > high_end:
             raise ParseException("Too many arguments encountered on line %d" % self._line_num)
         elif len(args) < low_end:
             raise ParseException("Too few arguments encountered on line %d" % self._line_num)
+
+    def _path_from_args(self, args):
+        return ' '.join(args)
 
 
 class Runtime(object):
@@ -291,22 +327,35 @@ class Runtime(object):
         self._view.restore_context(context_commands)
 
     def _save_context(self):
-        commands = {}
+        commands = []
+        command_types = []
+        command_filters = {PlayAudioCommand : self._check_audio,
+        StopAudioCommand : self._check_audio}
         # reversing the list causes the most recently-executed commmands to be considered first
         # useful since most recent = most relevant to context, which are the ones we want
         for candidate_cmd in reversed(self._commands[:self._index]):
             if candidate_cmd.save_with_context is True:
-                if type(candidate_cmd) not in commands.keys():
-                    commands[type(candidate_cmd)] = candidate_cmd
+                _filter = lambda c, _: type(c) not in command_types
+                if command_filters.has_key(type(candidate_cmd)):
+                    _filter = command_filters[type(candidate_cmd)]
+                if _filter(candidate_cmd, commands):
+                    commands.append(candidate_cmd)
+                    command_types.append(type(candidate_cmd))
                 else:
                     continue
-        self._contexts[self._index] = {"aliases" : copy.copy(self._aliases), "flags" : copy.copy(self._flags), "cmds" : commands.values()}
+        self._contexts[self._index] = {"aliases" : copy.copy(self._aliases), "flags" : copy.copy(self._flags), "cmds" : commands}
 
     def _partial_restore_context(self, context):
         new_aliases = context["aliases"]
         new_flags = context["flags"]
         self._aliases = new_aliases
         self._flags = new_flags
+
+    def _check_audio(self, candidate_cmd, commands):
+        if type(candidate_cmd) is PlayAudioCommand:
+            return StopAudioCommand not in commands
+        if type(candidate_cmd) is StopAudioCommand:
+            return PlayAudioCommand not in commands
 
 
 class ParseException(Exception):
@@ -561,6 +610,42 @@ class RestoreContextCommand(RuntimeCommand):
         merged_context["aliases"].update(new_context["aliases"])
         merged_context["flags"].update(new_context["flags"])
         return merged_context
+
+
+class PlayAudioCommand(RuntimeCommand):
+
+    save_with_context = True
+
+    def __init__(self, audio_path, line_num, index):
+        super(PlayAudioCommand, self).__init__(line_num, index)
+        self.audio_path = audio_path
+
+    def execute(self):
+        self.view.play_audio(self.audio_path)
+
+
+class StopAudioCommand(RuntimeCommand):
+
+    save_with_context = True
+
+    def execute(self):
+        self.view.stop_audio()
+
+
+class BackgroundCommand(RuntimeCommand):
+
+    save_with_context = True
+
+    def __init__(self, background_path, transition, line_num, index):
+        super(BackgroundCommand, self).__init__(line_num, index)
+        self.background_path = background_path
+        self.transition = transition
+
+    def execute(self):
+        if self.background_path is None:
+            self.view.clear_background()
+        else:
+            self.view.display_background(self.background_path, self.transition)
 
 
 def autoconvert_flag_value(value):

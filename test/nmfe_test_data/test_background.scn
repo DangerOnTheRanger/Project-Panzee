@@ -1,0 +1,7 @@
+No background now.
+[background path/to/background fade-in]
+Faded in background.
+[background none]
+No background.
+[background path/to/other/background]
+Different background without a transition.

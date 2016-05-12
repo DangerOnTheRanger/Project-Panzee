@@ -7,9 +7,10 @@ class MockView(object):
         self.dialogue = ""
         self.speaker = None
         self.background_path = None
-        self.background_displaying = False
+        self.displaying_background = False
+        self.background_transition = None
         self.audio_path = None
-        self.audio_playing = False
+        self.playing_audio = False
         self.choices = []
         self.choice = -1
         self.avatars = {}
@@ -18,23 +19,29 @@ class MockView(object):
     def display_dialogue(self, dialogue):
         self.dialogue = dialogue
 
+    def get_speaker(self):
+        return self.speaker
+
     def set_speaker(self, speaker):
         self.speaker = speaker
 
-    def set_background(self, background_path):
+    def display_background(self, background_path, transition):
         self.background_path = background_path
-        self.background_displaying = True
+        self.background_transition = transition
+        self.displaying_background = True
 
     def clear_background(self):
-        self.background_displaying = False
+        self.background_path = None
+        self.background_transition = None
+        self.displaying_background = False
 
     def play_audio(self, audio_path):
         self.audio_path = audio_path
-        self.audio_playing = True
+        self.playing_audio = True
 
     def stop_audio(self):
         self.audio_path = None
-        self.audio_playing = False
+        self.playing_audio = False
 
     def display_choices(self, choices):
         self.choices = choices
@@ -60,6 +67,8 @@ class MockView(object):
         del self.avatar_pos[avatar_name]
 
     def restore_context(self, commands):
+        self.clear_background()
+        self.stop_audio()
         for command in commands:
             command.execute()
 
@@ -109,7 +118,7 @@ def test_flags():
     assert runtime.get_flag("other_flag") == "bla"
     assert runtime.get_flag("another_flag") == None
     auto_step(runtime, 1)
-    assert runtime.has_flag("another_flag") == False
+    assert runtime.has_flag("another_flag") is False
 
 
 def test_if():
@@ -182,3 +191,33 @@ def test_scene():
     assert view.dialogue == "This is Floyd speaking again."
     auto_step(runtime, 2)
     assert view.dialogue == "The other scene set a flag."
+
+
+def test_audio():
+    view = MockView()
+    runtime = panzee.nmfe.Runtime(view)
+    runtime.read("test/nmfe_test_data/test_audio.scn")
+    auto_step(runtime, 2)
+    assert view.audio_path == "path/to/audio"
+    assert view.playing_audio is True
+    auto_step(runtime, 2)
+    assert view.audio_path is None
+    assert view.playing_audio is False
+
+
+def test_background():
+    view = MockView()
+    runtime = panzee.nmfe.Runtime(view)
+    runtime.read("test/nmfe_test_data/test_background.scn")
+    auto_step(runtime, 3)
+    assert view.background_path == "path/to/background"
+    assert view.background_transition == "fade-in"
+    assert view.displaying_background is True
+    auto_step(runtime, 2)
+    assert view.background_path is None
+    assert view.background_transition is None
+    assert view.displaying_background is False
+    auto_step(runtime, 2)
+    assert view.background_path == "path/to/other/background"
+    assert view.background_transition is None
+    assert view.displaying_background is True

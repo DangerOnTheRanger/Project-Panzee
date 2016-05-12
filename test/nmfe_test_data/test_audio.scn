@@ -1,0 +1,4 @@
+[audio path/to/audio]
+Audio is playing now.
+[stopaudio]
+No audio playing now.
