@@ -52,8 +52,10 @@ class Parser(object):
             # remove initial ~
             dialogue = line[1:]
             while line.endswith("~") is False:
-                line = self._read_next_line()
-                # TODO: properly check for EOF
+                try:
+                    line = self._read_next_line()
+                except IndexError:
+                    raise ParseException('EOF reached while searching for delimiting "~"')
                 # join with spaces so none have to be manually added by the writer
                 dialogue = " ".join((dialogue, line))
             # remove final ~
