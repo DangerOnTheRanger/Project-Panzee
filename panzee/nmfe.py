@@ -1,4 +1,5 @@
 import copy
+import json
 
 
 class Parser(object):
@@ -286,6 +287,23 @@ class Runtime(object):
         for command in self._commands:
             command.verify()
 
+    def get_state(self):
+        state = {}
+        state["context"] = self.get_context()
+        commands = state["context"]["cmds"]
+        state["context"]["cmds"] = self._commands_to_indexes(commands)
+        state["index"] = self._last_executed_index()
+        return state
+
+    def load_state(self, state):
+        context = state["context"]
+        command_indexes = state["context"]["cmds"]
+        context_commands = self._indexes_to_commands(command_indexes)
+        index = state["index"]
+        self._partial_restore_context(context)
+        self.jump_to(index)
+        self._view.restore_context(context_commands)
+
     def jump_to(self, index):
         self._index = index
 
@@ -324,7 +342,7 @@ class Runtime(object):
         if index:
             return self._contexts[index]
         else:
-            return self._contexts[self._index]
+            return self._contexts[self._last_executed_index()]
 
     def restore_context(self, context):
         self._partial_restore_context(context)
@@ -361,6 +379,22 @@ class Runtime(object):
             return StopAudioCommand not in commands
         if type(candidate_cmd) is StopAudioCommand:
             return PlayAudioCommand not in commands
+
+    def _commands_to_indexes(self, commands):
+        indexes = []
+        for command in commands:
+            indexes.append(command.index)
+        return indexes
+
+    def _indexes_to_commands(self, indexes):
+        commands = []
+        for index in indexes:
+            command = self._commands[index]
+            commands.append(command)
+        return commands
+
+    def _last_executed_index(self):
+        return self._index - 1
 
 
 class ParseException(Exception):
@@ -675,3 +709,11 @@ def search_for_command(commands, cmd_class, start_range=None, end_range=None, _f
         if type(command) == cmd_class and _filter(command):
             results.append(command)
     return results
+
+
+def state_to_serializable(state):
+    return json.dumps(state)
+
+
+def serializable_to_state(serializable):
+    return json.loads(serializable)

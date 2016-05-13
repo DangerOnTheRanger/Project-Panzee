@@ -221,3 +221,22 @@ def test_background():
     assert view.background_path == "path/to/other/background"
     assert view.background_transition is None
     assert view.displaying_background is True
+
+
+def test_saveload():
+    first_view = MockView()
+    first_runtime = panzee.nmfe.Runtime(first_view)
+    first_runtime.read("test/nmfe_test_data/test_saveload.scn")
+    auto_step(first_runtime, 3)
+    unserialized_state = first_runtime.get_state()
+    del first_runtime
+    del first_view
+    second_view = MockView()
+    saved_state = panzee.nmfe.state_to_serializable(unserialized_state)
+    new_state = panzee.nmfe.serializable_to_state(saved_state)
+    second_runtime = panzee.nmfe.Runtime(second_view)
+    second_runtime.read("test/nmfe_test_data/test_saveload.scn")
+    second_runtime.load_state(new_state)
+    auto_step(second_runtime, 1)
+    assert second_view.speaker == "Floyd"
+    assert second_view.dialogue == "The second runtime will begin on this line."
