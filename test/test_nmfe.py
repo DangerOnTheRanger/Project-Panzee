@@ -198,7 +198,6 @@ def test_audio():
     runtime = panzee.nmfe.Runtime(view)
     runtime.read("test/nmfe_test_data/test_audio.scn")
     auto_step(runtime, 2)
-    assert view.audio_path == "path/to/audio"
     assert view.playing_audio is True
     auto_step(runtime, 2)
     assert view.audio_path is None
@@ -210,7 +209,7 @@ def test_background():
     runtime = panzee.nmfe.Runtime(view)
     runtime.read("test/nmfe_test_data/test_background.scn")
     auto_step(runtime, 3)
-    assert view.background_path == "path/to/background"
+    assert view.background_path == "test/nmfe_test_data/assets/backgrounds/desert.png"
     assert view.background_transition == "fade-in"
     assert view.displaying_background is True
     auto_step(runtime, 2)
@@ -218,7 +217,7 @@ def test_background():
     assert view.background_transition is None
     assert view.displaying_background is False
     auto_step(runtime, 2)
-    assert view.background_path == "path/to/other/background"
+    assert view.background_path == "test/nmfe_test_data/assets/backgrounds/desert.png"
     assert view.background_transition is None
     assert view.displaying_background is True
 

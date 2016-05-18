@@ -1,5 +1,9 @@
+import os
 import copy
 import json
+
+
+IMAGE_EXTS = (".png", ".jpg")
 
 
 class Parser(object):
@@ -13,6 +17,7 @@ class Parser(object):
         self._next_tree_id = starting_tree_id
         self._inside_tree = False
         self._playing_audio = False
+        self._expecting_avatar = False
 
     def read(self, file_path):
         self._lines = open(file_path).readlines()
@@ -70,21 +75,24 @@ class Parser(object):
         self._next_cmd_index += 1
 
     def _construct_command(self, tag, args):
-        handlers = {'actor' : self._construct_actor,
-        'alias' : self._construct_alias,
-        'set' : self._construct_set,
-        'unset' : self._construct_unset,
-        'if' : self._construct_if,
-        'elseif' : self._construct_elseif,
-        'else' : self._construct_else,
-        'endif' : self._construct_endif,
-        'tree' : self._construct_tree,
-        'leaf' : self._construct_leaf,
-        'endtree' : self._construct_endtree,
-        'scene' : self._construct_scene,
-        'audio' : self._construct_playaudio,
-        'stopaudio' : self._construct_stopaudio,
-        'background' : self._construct_background}
+        handlers = {"actor" : self._construct_actor,
+        "alias" : self._construct_alias,
+        "set" : self._construct_set,
+        "unset" : self._construct_unset,
+        "if" : self._construct_if,
+        "elseif" : self._construct_elseif,
+        "else" : self._construct_else,
+        "endif" : self._construct_endif,
+        "tree" : self._construct_tree,
+        "leaf" : self._construct_leaf,
+        "endtree" : self._construct_endtree,
+        "scene" : self._construct_scene,
+        "audio" : self._construct_playaudio,
+        "stopaudio" : self._construct_stopaudio,
+        "background" : self._construct_background,
+        "avatar" : self._construct_displayavatar,
+        "exit" : self._construct_removeavatar,
+        "position" : self._construct_avatarposition}
         if tag not in handlers.keys():
             raise ParseException('Unknown command "%s" found on line %d' % (tag, self._line_num))
         return handlers[tag](args)
@@ -92,10 +100,12 @@ class Parser(object):
     def _construct_actor(self, args):
         if len(args) > 1:
             raise ParseException("Unexpected arguments encountered on line %d" % self._line_num)
+        self._expecting_avatar = True
         name = args[0]
         if name == "nobody":
             # remove the active speaker
             name = None
+            self._expecting_avatar = False
         command = ActiveSpeakerCommand(name, self._line_num, self._next_cmd_index)
         return command
 
@@ -246,6 +256,30 @@ class Parser(object):
         background_command = BackgroundCommand(background_path, transition, self._line_num, self._next_cmd_index)
         return background_command
 
+    def _construct_displayavatar(self, args):
+        self._check_arg_size(args, 1, 1)
+        if self._expecting_avatar is False:
+            raise ParseException("Attempt to use avatar before setting an actor made on line %d" % self._line_num)
+        avatar = args[0]
+        command = DisplayAvatarCommand(avatar, self._line_num, self._next_cmd_index)
+        return command
+
+    def _construct_removeavatar(self, args):
+        self._check_arg_size(args, 0, 0)
+        if self._expecting_avatar is False:
+            raise ParseException("Attempt to remove avatar before setting an actor made on line %d" % self._line_num)
+        self._expecting_avatar = False
+        command = RemoveAvatarCommand(self._line_num, self._next_cmd_index)
+        return command
+
+    def _construct_avatarposition(self, args):
+        self._check_arg_size(args, 1, 1)
+        if self._expecting_avatar is False:
+            raise ParseException("Attempt to set avatar positon before setting an actor made on line %d" % self._line_num)
+        position = args[0]
+        command = SetAvatarPositionCommand(position, self._line_num, self._next_cmd_index)
+        return command
+
     def _check_arg_size(self, args, low_end, high_end):
         if len(args) > high_end:
             raise ParseException("Too many arguments encountered on line %d" % self._line_num)
@@ -265,6 +299,7 @@ class Runtime(object):
         self._view = view
         self._aliases = {}
         self._flags = {}
+        self._root = ""
 
     def read(self, file_path):
         parser = Parser()
@@ -273,6 +308,7 @@ class Runtime(object):
         for command in self._commands:
             command.bind_to_runtime(self)
             command.bind_to_view(self._view)
+        self._root = os.path.dirname(file_path)
 
     def can_step(self):
         return self._index < len(self._commands)
@@ -317,11 +353,19 @@ class Runtime(object):
     def add_alias(self, alias, real_name):
         self._aliases[alias] = real_name
 
-    def has_alias_for(self, alias):
+    def has_real_name_for(self, alias):
         return alias in self._aliases.keys()
 
-    def get_alias_for(self, alias):
+    def get_name_for(self, alias):
         return self._aliases[alias]
+
+    def has_alias_for(self, name):
+        inverted = {v: k for k, v in self._aliases.iteritems()}
+        return name in inverted.keys()
+
+    def get_alias_for(self, name):
+        inverted = {v: k for k, v in self._aliases.iteritems()}
+        return inverted[name]
 
     def set_flag(self, name, value):
         self._flags[name] = autoconvert_flag_value(value)
@@ -348,6 +392,9 @@ class Runtime(object):
         self._partial_restore_context(context)
         context_commands = context["cmds"]
         self._view.restore_context(context_commands)
+
+    def get_scene_root(self):
+        return self._root
 
     def _save_context(self):
         commands = []
@@ -451,8 +498,8 @@ class ActiveSpeakerCommand(RuntimeCommand):
 
     def execute(self):
         name = self._name
-        if self.runtime.has_alias_for(name):
-            name = self.runtime.get_alias_for(name)
+        if self.runtime.has_real_name_for(name):
+            name = self.runtime.get_name_for(name)
         self.view.set_speaker(name)
 
 
@@ -654,14 +701,26 @@ class RestoreContextCommand(RuntimeCommand):
 class PlayAudioCommand(RuntimeCommand):
 
     save_with_context = True
+    AUDIO_DIR = "assets/audio"
+    AUDIO_EXTS = (".mp3", ".ogg", ".wav")
 
     def __init__(self, audio_path, line_num, index):
         super(PlayAudioCommand, self).__init__(line_num, index)
         self.audio_path = audio_path
 
     def execute(self):
-        self.view.play_audio(self.audio_path)
+        path = self._find_audio_path()
+        self.view.play_audio(path)
 
+    def _find_audio_path(self):
+        base_path = os.path.join(self.runtime.get_scene_root(), PlayAudioCommand.AUDIO_DIR, self.audio_path)
+        path = None
+        for extension in PlayAudioCommand.AUDIO_EXTS:
+            candidate_path = base_path + extension
+            if os.path.exists(candidate_path):
+                path = candidate_path
+                break
+        return path
 
 class StopAudioCommand(RuntimeCommand):
 
@@ -674,6 +733,7 @@ class StopAudioCommand(RuntimeCommand):
 class BackgroundCommand(RuntimeCommand):
 
     save_with_context = True
+    BACKGROUND_DIR = os.path.join("assets", "backgrounds")
 
     def __init__(self, background_path, transition, line_num, index):
         super(BackgroundCommand, self).__init__(line_num, index)
@@ -684,7 +744,90 @@ class BackgroundCommand(RuntimeCommand):
         if self.background_path is None:
             self.view.clear_background()
         else:
-            self.view.display_background(self.background_path, self.transition)
+            path = self._get_path_to_background()
+            self.view.display_background(path, self.transition)
+
+    def verify(self):
+        if self.background_path is not None and self._get_path_to_background() is None:
+            raise VerifyException("Attempt to use non-existent background encountered on line %d" % self.line_num)
+
+    def _get_path_to_background(self):
+        base_path = os.path.join(self.runtime.get_scene_root(), BackgroundCommand.BACKGROUND_DIR, self.background_path)
+        path = None
+        for extension in IMAGE_EXTS:
+            candidate_path = base_path + extension
+            if os.path.exists(candidate_path):
+                path = candidate_path
+                break
+        return path
+
+
+#TODO: write test cases for avatar commands
+class AvatarCommand(RuntimeCommand):
+
+    def _get_name(self, use_alias=True):
+        name = self.view.get_speaker()
+        if use_alias and self.runtime.has_alias_for(name):
+            name = self.runtime.get_alias_for(name)
+        return name
+
+
+class DisplayAvatarCommand(AvatarCommand):
+
+    save_with_context = True
+    AVATAR_DIR = os.path.join("assets", "avatars")
+
+    def __init__(self, avatar, line_num, index):
+        super(DisplayAvatarCommand, self).__init__(line_num, index)
+        self.avatar = avatar
+
+    def execute(self):
+        avatar_path = self._get_path_to_avatar()
+        self.view.display_avatar(avatar_path)
+
+    def verify(self):
+        if self._get_path_to_avatar() is None:
+            raise VerifyException("Attempt to use non-existent avatar encountered on line %d" % self.line_num)
+
+    def _get_path_to_avatar(self):
+        name = self._get_name(use_alias=True)
+        base_path = os.path.join(self.runtime.get_scene_root(), DisplayAvatarCommand.AVATAR_DIR, name, self.avatar)
+        path = None
+        for extension in IMAGE_EXTS:
+            candidate_path = base_path + extension
+            if os.path.exists(candidate_path):
+                path = candidate_path
+                break
+        return path
+
+
+class RemoveAvatarCommand(AvatarCommand):
+
+    def execute(self):
+        name = self._get_name(use_alias=False)
+        self.view.remove_avatar(name)
+        self.view.set_speaker(None)
+
+
+class SetAvatarPositionCommand(AvatarCommand):
+
+    def __init__(self, position, line_num, index):
+        super(SetAvatarPositionCommand, self).__init__(line_num, index)
+        self.position = position
+
+    def execute(self):
+        name = self._get_name(use_alias=False)
+        self.view.set_avatar_position(name, self.position)
+
+
+class WaitCommand(RuntimeCommand):
+
+    def __init__(self, duration, line_num, index):
+        super(WaitCommand, self).__init__
+        self.duration = duration
+
+    def execute(self):
+        self.view.wait(duration)
 
 
 def autoconvert_flag_value(value):
