@@ -102,9 +102,6 @@ Here is an example of how avatars are used:
     Currently there are no avatars. Let's change that.
     But we'll need to define some actors first.
     [actor bubba]
-    [avatar neutral]
-    Normally, when an actor is loaded, the "neutral" avatar is automatically used.
-    We've gone and made it explicit here for the sake of completeness, however.
     [position left]
     Avatars can be moved around the screen as well.
     By default, preset positions "left," "right," and "center" are available.
@@ -132,6 +129,7 @@ command, as in the following example.
     We can stop audio as well, with the stopaudio command.
     [stopaudio]
     Now, no audio is playing.
+
 
 Scenes
 ------
@@ -208,3 +206,16 @@ the flags and `if/then` sequences discussed earlier.
 As an interesting sidenote, it is perfectly valid to use `[if]` and other statements
 inside a `[tree]` declaration, meaning it's possible to create different choices based
 on the status of flags.
+
+
+Delaying execution
+------------------
+
+Normally, NMF commands are executed as soon as possible, though sometimes it
+is convenient to delay execution of later commands by some time; for instance,
+to show a character's avatar going through a range of emotions. This is accomplished
+through the `[wait]` command:
+
+  This line displays instantly, but...
+  [wait 2.5]
+  This line will display a short time later. About 2.5 seconds later.
