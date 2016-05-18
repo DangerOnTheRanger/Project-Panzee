@@ -6,6 +6,11 @@ import struct
 import platform
 import subprocess
 
+import pyglet
+import cocos
+from cocos.director import director
+from cocos.audio.pygame.mixer import Sound
+from cocos.audio.pygame import mixer
 import colorama
 colorama.init()
 
@@ -171,6 +176,9 @@ class ConsoleView(object):
     def stop_audio(self):
         pass
 
+    def get_speaker(self):
+        return self._speaker
+
     def set_speaker(self, speaker):
         self._speaker = speaker
 
@@ -188,6 +196,9 @@ class ConsoleView(object):
         self.state = ConsoleView.IDLE
         return choice
 
+    def wait(self, duration):
+        time.sleep(duration)
+
     def update(self):
         if self._need_refresh is True:
             self._draw_interface()
@@ -203,6 +214,28 @@ class ConsoleView(object):
         self.stop_audio()
         for command in commands:
             command.execute()
+
+    def mainloop(self, runtime):
+        while True:
+            if runtime.can_step() is False and self.state is ConsoleView.IDLE:
+                break
+            if self.state is ConsoleView.IDLE:
+                command = runtime.step()
+                command.execute()
+            elif self.state is ConsoleView.WAIT_INPUT:
+                while True:
+                    char = getch()
+                    if char == "d":
+                        self.state = ConsoleView.IDLE
+                        break
+                    elif char == "s":
+                        clear_screen()
+                        sys.exit(0)
+            self.update()
+
+        clear_screen()
+        print "End of file reached. Press any key to exit."
+        getch()
 
     def _draw_interface(self):
         clear_screen()
@@ -232,8 +265,206 @@ class ConsoleView(object):
         self.state = ConsoleView.IDLE
 
 
+class CocosUILayer(cocos.layer.ColorLayer):
+
+    is_event_handler = True
+    UI_COLOR = (200, 200, 200)
+    UI_OPACITY = 200
+    UI_HEIGHT = 150
+
+    def __init__(self):
+        super(CocosUILayer, self).__init__(0, 0, 0, 0, CocosView.WIDTH, CocosUILayer.UI_HEIGHT)
+        self.color = CocosUILayer.UI_COLOR
+        self.opacity = CocosUILayer.UI_OPACITY
+
+    def advance_request(self):
+        pass
+
+    def on_key_release(self, key, _):
+        if key < 255 and chr(key) == CocosView.ADVANCE_NEXT_KEY:
+            self.advance_request()
+
+
+class CocosView(object):
+
+    DIALOGUE, GET_CHOICE, WAIT, WAIT_INPUT, IDLE = range(5)
+    WIDTH = 800
+    HEIGHT = 600
+    TITLE = "NMFe Standalone Player"
+    ACTOR_FONT_SIZE = 20
+    DIALOGUE_FONT_SIZE = 16
+    ADVANCE_NEXT_KEY = "n"
+    FONT = "Sans Serif"
+    DIALOGUE_DELAY = 0.035
+
+    def __init__(self):
+        self._actor_label = None
+        self._dialogue_box = None
+        self._scene = None
+        self._audio = None
+        self._background = None
+        self._ui_layer = None
+        self._image_layer = None
+        self._dialogue_dirty = False
+        self._dialogue_buffer = []
+        self._avatars = {}
+        self._speaker = None
+        self._state = CocosView.IDLE
+        self._start_time = -1
+        self._duration = -1
+        self._update_speaker = False
+
+    def display_dialogue(self, dialogue):
+        self._state = CocosView.DIALOGUE
+        self._dialogue_dirty = True
+        self._dialogue_buffer = list(dialogue)
+
+    def set_speaker(self, speaker):
+        self._speaker = speaker
+        self._update_speaker = True
+
+    def get_speaker(self):
+        return self._speaker
+
+    def display_background(self, background_path, transition):
+        if self._background is not None:
+            self.clear_background()
+        image = pyglet.image.load(background_path)
+        self._background = cocos.sprite.Sprite(image)
+        self._background.position = (CocosView.WIDTH / 2, CocosView.HEIGHT / 2)
+        self._image_layer.add(self._background, z=-1)
+
+    def clear_background(self):
+        self._background.kill()
+        self._background = None
+
+    def play_audio(self, audio_path):
+        if self._audio is not None:
+            self.stop_audio()
+        self._audio = Sound(audio_path)
+        self._audio.play(-1)
+
+    def stop_audio(self):
+        self._audio.stop()
+        self._audio = None
+
+    def display_avatar(self, avatar_path):
+        old_position = None
+        already_displaying = False
+        if self._avatars.has_key(self.get_speaker()):
+            already_displaying = True
+            current_avatar = self._avatars[self.get_speaker()]
+            old_position = current_avatar.position
+            self.remove_avatar(self.get_speaker())
+        image = pyglet.image.load(avatar_path)
+        sprite = cocos.sprite.Sprite(image)
+        if old_position:
+            sprite.position = old_position
+        else:
+            sprite.position = (CocosView.WIDTH / 2, sprite.height / 2)
+        self._avatars[self.get_speaker()] = sprite
+        if already_displaying:
+            self._image_layer.add(sprite)
+
+    def remove_avatar(self, avatar):
+        sprite = self._avatars[avatar]
+        sprite.kill()
+        del self._avatars[avatar]
+
+    def set_avatar_position(self, avatar, position):
+        sprite = self._avatars[avatar]
+        if position == "left":
+            sprite.position = (sprite.width / 2, sprite.height / 2)
+        elif position == "center":
+            sprite.position = (CocosView.WIDTH / 2, sprite.height / 2)
+        elif position == "right":
+            sprite.position = (CocosView.WIDTH - sprite.width / 2, sprite.height / 2)
+        if sprite not in self._image_layer:
+            self._image_layer.add(sprite)
+
+    def wait(self, duration):
+        self._duration = duration
+        self._start_time = time.time()
+        self._state = CocosView.WAIT
+
+    def restore_context(self, commands):
+        self.clear_background()
+        self.stop_audio()
+        for command in commands:
+            command.execute()
+
+    def mainloop(self, runtime):
+        mixer.init()
+        director.init(width=CocosView.WIDTH, height=CocosView.HEIGHT, caption=CocosView.TITLE)
+        self._runtime = runtime
+        self._init_interface()
+        self._scene.schedule(self._update)
+        self._scene.schedule_interval(self._render_dialogue, CocosView.DIALOGUE_DELAY)
+        director.run(self._scene)
+
+    def _update(self, _):
+        if self._runtime.can_step() is False and self._state is CocosView.IDLE:
+            pyglet.app.exit()
+        elif self._state is CocosView.IDLE:
+            command = self._runtime.step()
+            command.execute()
+        elif self._state is CocosView.WAIT:
+            current_time = time.time()
+            if current_time - self._start_time >= self._duration:
+                self._state = CocosView.IDLE
+
+    def _render_dialogue(self, _):
+        if self._dialogue_dirty:
+            self._dialogue_dirty = False
+            self._dialogue_box.element.text = ""
+        if self._state is CocosView.DIALOGUE:
+            if len(self._dialogue_buffer) == 0:
+                self._state = CocosView.WAIT_INPUT
+            else:
+                self._dialogue_box.element.text += self._dialogue_buffer.pop(0)
+            if self._update_speaker:
+                if self._speaker is None:
+                    self._actor_label.element.text = ""
+                else:
+                    self._actor_label.element.text = self._speaker
+                    self._update_speaker = False
+
+    def _advance_request(self):
+        if self._state is not CocosView.GET_CHOICE:
+            if len(self._dialogue_buffer) > 0:
+                self._dialogue_box.element.text += ''.join(self._dialogue_buffer)
+                self._dialogue_buffer = []
+            else:
+                self._state = CocosView.IDLE
+
+    def _init_interface(self):
+        self._scene = cocos.scene.Scene()
+        self._image_layer = cocos.layer.Layer()
+        self._scene.add(self._image_layer)
+        self._ui_layer = CocosUILayer()
+        self._ui_layer.advance_request = self._advance_request
+        self._actor_label = cocos.text.Label(font_name=CocosView.FONT,
+                                            font_size=CocosView.ACTOR_FONT_SIZE,
+                                            anchor_x="left",
+                                            color=(100, 100, 150, 255))
+        self._actor_label.position = (20, 120)
+        self._ui_layer.add(self._actor_label)
+        self._dialogue_box = cocos.text.Label(font_name=CocosView.FONT,
+                                             font_size=CocosView.DIALOGUE_FONT_SIZE,
+                                             anchor_x="left",
+                                             color=(50, 50, 50, 255),
+                                             width=CocosView.WIDTH - 100,
+                                             multiline=True)
+        self._dialogue_box.position = (20, 80)
+        self._dialogue_box.element.text = "Some test text.\nSome more."
+        self._ui_layer.add(self._dialogue_box)
+        self._scene.add(self._ui_layer)
+
 def main():
-    view = ConsoleView()
+    if os.getenv("NO_COCOS"):
+        view = ConsoleView()
+    else:
+        view = CocosView()
     runtime = panzee.nmfe.Runtime(view)
     if len(sys.argv) < 2:
         print "Usage: nmfe-player scene"
@@ -244,26 +475,7 @@ def main():
     except panzee.nmfe.ParseException as e:
         print "Parse error:", str(e)
         sys.exit(1)
-    while True:
-        if runtime.can_step() is False and view.state is ConsoleView.IDLE:
-            break
-        if view.state is ConsoleView.IDLE:
-            command = runtime.step()
-            command.execute()
-        elif view.state is ConsoleView.WAIT_INPUT:
-            while True:
-                char = getch()
-                if char == "d":
-                    view.state = ConsoleView.IDLE
-                    break
-                elif char == "s":
-                    clear_screen()
-                    sys.exit(0)
-        view.update()
-
-    clear_screen()
-    print "End of file reached. Press any key to exit."
-    getch()
+    view.mainloop(runtime)
 
 
 if __name__ == "__main__":
