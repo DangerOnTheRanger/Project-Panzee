@@ -7,7 +7,15 @@ IMAGE_EXTS = (".png", ".jpg")
 
 
 class Parser(object):
+    """Parse a .scn file into a list of Command objects.
+    This is not meant to be used directly; use Runtime.read instead.
+    """
     def __init__(self, starting_cmd_index=0, starting_cmp_id=0, starting_tree_id=0):
+        """Initalize a Parser object
+        starting_cmd_index is the index this Parser should start at when assigning
+        indexes to any generated Command objects - useful for scene support.
+        starting_cmp_id and starting_tree_id are used for the same thing.
+        """
         self._lines = []
         self._line_num = 0
         self._commands = []
@@ -20,17 +28,27 @@ class Parser(object):
         self._expecting_avatar = False
 
     def read(self, file_path):
+        """Parse a file located at file_path
+        Will raise a ParseException if a parsing error occurs.
+        """
         self._lines = open(file_path).readlines()
         while self._lines:
             self._parse_next_line()
 
     def get_commands(self):
+        """Get parsed commands in the form of a list
+        """
         return self._commands
 
     def get_next_cmp_id(self):
+        """Get next available comparison ID
+        This function should not ordinarily be used save for new Command subclasses.
+        """
         return self._next_cmp_id
 
     def get_next_tree_id(self):
+        """Get next available decision tree ID
+        """
         return self._next_tree_id
 
     def _read_next_line(self):
@@ -43,6 +61,7 @@ class Parser(object):
         if not line:
             # early exit on empty line
             return
+        # [ indicates a line with a command
         if line.startswith("["):
             delimiting_index = line.find("]")
             if delimiting_index == -1:
@@ -54,6 +73,7 @@ class Parser(object):
             command_tag = args.pop(0)
             command = self._construct_command(command_tag, args)
             self._add_command(command)
+        # multi-line dialogue statment
         elif line.startswith("~"):
             # remove initial ~
             dialogue = line[1:]
@@ -67,6 +87,7 @@ class Parser(object):
             # remove final ~
             dialogue = dialogue[:-1]
             self._add_command(DialogueCommand(dialogue, self._line_num, self._next_cmd_index))
+        # normal line, treat it as dialogue
         else:
             self._add_command(DialogueCommand(line, self._line_num, self._next_cmd_index))
 
@@ -291,8 +312,16 @@ class Parser(object):
 
 
 class Runtime(object):
+    """Provide runtime functionality for the NMF engine
+    This is the main class that should be utilized by external code.
+    """
 
     def __init__(self, view):
+        """Initialize a Runtime object
+        view is a class implementing most of the methods found in MockView,
+        in test/test_nmfe.py. See bin/nmfe-player.py for two full implementations
+        of a view.
+        """
         self._index = 0
         self._commands = []
         self._contexts = {}
@@ -302,6 +331,10 @@ class Runtime(object):
         self._root = ""
 
     def read(self, file_path):
+        """Parse a file located at file_path
+        Convenience wrapper around Parser.read that binds all incoming commands
+        to this Runtime object.
+        """
         parser = Parser()
         parser.read(file_path)
         self._commands = parser.get_commands()
@@ -311,29 +344,50 @@ class Runtime(object):
         self._root = os.path.dirname(file_path)
 
     def can_step(self):
+        """Return True if there are more commands to be executed, False otherwise
+        """
         return self._index < len(self._commands)
 
     def step(self):
+        """Executes next available command
+        Call Runtime.can_step first to ensure this method will not throw
+        an exception.
+        """
         command = self._commands[self._index]
         self._save_context()
         self._index += 1
         return command
 
     def verify(self):
+        """Verifies integrity of all loaded commands
+        Some commands have data that cannot be verified at parse time, such as
+        the existence/validity of media files. This function ensures all commands
+        get a chance to verify things like that.
+        """
         for command in self._commands:
             command.verify()
 
     def get_state(self):
+        """Return runtime state in a form suitable for serialization
+        """
         state = {}
         state["context"] = self.get_context()
         commands = state["context"]["cmds"]
+        # convert command objects to their indexes
+        # much easier to serialize this way; no pesky complex datatypes
         state["context"]["cmds"] = self._commands_to_indexes(commands)
         state["index"] = self._last_executed_index()
         return state
 
     def load_state(self, state):
+        """Load from a previously-saved runtime state
+        The format of the state variable is exactly the same that
+        Runtime.get_state returns.
+        """
         context = state["context"]
         command_indexes = state["context"]["cmds"]
+        # convert index numbers to command objects
+        # can't restore state based off a bunch of ints, can we?
         context_commands = self._indexes_to_commands(command_indexes)
         index = state["index"]
         self._partial_restore_context(context)
@@ -341,9 +395,22 @@ class Runtime(object):
         self._view.restore_context(context_commands)
 
     def jump_to(self, index):
+        """Jump without context to the given index
+        This method does not restore context, which is probably not what you
+        want; it's normally wiser to use Runtime.jump_with_context instead.
+        Additionally, this method does no checks to make sure whether the given
+        index is in bounds - try to stick to using indexes directly from a
+        Command object or from Runtime.search_for_command if you can help it.
+        This method does not immediately execute the jumped-to index - be sure
+        that you do this after calling this method..
+        """
         self._index = index
 
     def jump_with_context(self, index):
+        """Jump to the given index and restore context
+        All the warnings listed in the documentation for Runtime.jump_to
+        apply here.
+        """
         context = self.get_context(index)
         context_commands = context["cmds"]
         self._partial_restore_context(context)
@@ -351,49 +418,81 @@ class Runtime(object):
         self._view.restore_context(context_commands)
 
     def add_alias(self, alias, real_name):
+        """Add an alias for an actor
+        """
         self._aliases[alias] = real_name
 
     def has_real_name_for(self, alias):
+        """Return True if alias is registered, False otherwise.
+        """
         return alias in self._aliases.keys()
 
     def get_name_for(self, alias):
+        """Return the real name assigned to the given alias
+        """
         return self._aliases[alias]
 
     def has_alias_for(self, name):
+        """Return True if there is an alias assigned to name, False otherwise
+        """
         inverted = {v: k for k, v in self._aliases.iteritems()}
         return name in inverted.keys()
 
     def get_alias_for(self, name):
+        """Return the alias associated with name
+        """
         inverted = {v: k for k, v in self._aliases.iteritems()}
         return inverted[name]
 
     def set_flag(self, name, value):
+        """Set a flag
+        The given value is automatically converted to an integer if value
+        constitutes a valid integer in string form.
+        """
         self._flags[name] = autoconvert_flag_value(value)
 
     def get_flag(self, name):
+        """Return the value of the flag with the given name
+        Raises KeyError if there is no such flag.
+        """
         return self._flags[name]
 
     def unset_flag(self, name):
+        """Remove the flag with the given name
+        Raises KeyError if there is no such flag.
+        """
         del self._flags[name]
 
     def has_flag(self, name):
+        """Return True if a flag with the given name exists, False otherwise
+        """
         return name in self._flags.keys()
 
     def search_for_command(self, cmd_class, start_range = None, end_range = None, _filter=lambda c: True):
+        """Convenience wrapper around nmfe.search_for_command
+        See that function for more documentation
+        """
         return search_for_command(self._commands, cmd_class, start_range, end_range, _filter)
 
     def get_context(self, index = None):
+        """Return the context of the given index
+        if index is None, return the context for the last-executed index
+        """
         if index:
             return self._contexts[index]
         else:
             return self._contexts[self._last_executed_index()]
 
     def restore_context(self, context):
+        """Run commands necessary to restore the given context
+        """
         self._partial_restore_context(context)
         context_commands = context["cmds"]
         self._view.restore_context(context_commands)
 
     def get_scene_root(self):
+        """Return the root directory of the main scene file
+        """
         return self._root
 
     def _save_context(self):
@@ -453,8 +552,17 @@ class VerifyException(Exception):
 
 
 class RuntimeCommand(object):
+    """Base class for Command objects
+    Don't instantiate this class directly; inherit from it instead.
+    """
 
+    # can_stop_at is a flag to indicate to a view whether this command is a point
+    # at which the view can save at or rewind to
     can_stop_at = False
+    # if save_with_context is True, then by default the runtime will save
+    # the most recent occurrence of this command when saving context
+    # there are other methods of choosing which to save though,
+    # see Runtime._save_context to see how
     save_with_context = False
 
     def __init__(self, line_num, index):
@@ -464,9 +572,18 @@ class RuntimeCommand(object):
         self.index = index
 
     def execute(self):
+        """Execute command
+        When ovverriding this method in a subclass, be sure to take into account
+        the fact that this method could potentially be called multiple times
+        due to the runtime rewinding to a previous point.
+        """
         pass
 
     def verify(self):
+        """Verify this command object's integrity
+        When overriding this method in a subclass, throw VerifyException if
+        verification fails, but do nothing otherwise.
+        """
         pass
 
     def bind_to_runtime(self, runtime):
@@ -676,6 +793,8 @@ class SaveContextCommand(RuntimeCommand):
 
 
 class RestoreContextCommand(RuntimeCommand):
+    """Restores context after a scene transition
+    """
 
     def execute(self):
         last_save = self._most_recent_save_context()
@@ -721,6 +840,7 @@ class PlayAudioCommand(RuntimeCommand):
                 path = candidate_path
                 break
         return path
+
 
 class StopAudioCommand(RuntimeCommand):
 
