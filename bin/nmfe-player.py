@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import os
 import sys
 import time
@@ -14,8 +15,8 @@ from cocos.audio.pygame import mixer
 import colorama
 colorama.init()
 
-sys.path.append(os.pardir)
-sys.path.append(os.curdir)
+# support running from locations outside the bin directory assuming symbolic links aren't used
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 import panzee.nmfe
 
 
@@ -305,6 +306,8 @@ class CocosView(object):
         self._background = None
         self._ui_layer = None
         self._image_layer = None
+        self._delete_queue = []
+        self._display_queue = []
         self._dialogue_dirty = False
         self._dialogue_buffer = []
         self._avatars = {}
@@ -328,14 +331,14 @@ class CocosView(object):
 
     def display_background(self, background_path, transition):
         if self._background is not None:
-            self.clear_background()
+            self._delete_queue.append(self._background)
         image = pyglet.image.load(background_path)
         self._background = cocos.sprite.Sprite(image)
         self._background.position = (CocosView.WIDTH / 2, CocosView.HEIGHT / 2)
-        self._image_layer.add(self._background, z=-1)
+        self._display_queue.append((self._background, -1))
 
     def clear_background(self):
-        self._background.kill()
+        self._delete_queue.append(self._background)
         self._background = None
 
     def play_audio(self, audio_path):
@@ -345,8 +348,9 @@ class CocosView(object):
         self._audio.play(-1)
 
     def stop_audio(self):
-        self._audio.stop()
-        self._audio = None
+        if self._audio is not None:
+            self._audio.stop()
+            self._audio = None
 
     def display_avatar(self, avatar_path):
         old_position = None
@@ -364,11 +368,10 @@ class CocosView(object):
             sprite.position = (CocosView.WIDTH / 2, sprite.height / 2)
         self._avatars[self.get_speaker()] = sprite
         if already_displaying:
-            self._image_layer.add(sprite)
+            self._display_queue.append((sprite, 0))
 
     def remove_avatar(self, avatar):
-        sprite = self._avatars[avatar]
-        sprite.kill()
+        self._delete_queue.append(self._avatars[avatar])
         del self._avatars[avatar]
 
     def set_avatar_position(self, avatar, position):
@@ -380,14 +383,16 @@ class CocosView(object):
         elif position == "right":
             sprite.position = (CocosView.WIDTH - sprite.width / 2, sprite.height / 2)
         if sprite not in self._image_layer:
-            self._image_layer.add(sprite)
+            self._display_queue.append((sprite, 0))
 
     def wait(self, duration):
+        self._check_delete_queue()
         self._duration = duration
         self._start_time = time.time()
         self._state = CocosView.WAIT
 
     def restore_context(self, commands):
+        self._check_delete_queue()
         self.clear_background()
         self.stop_audio()
         for command in commands:
@@ -418,6 +423,8 @@ class CocosView(object):
             self._dialogue_dirty = False
             self._dialogue_box.element.text = ""
         if self._state is CocosView.DIALOGUE:
+            self._check_delete_queue()
+            self._check_display_queue()
             if len(self._dialogue_buffer) == 0:
                 self._state = CocosView.WAIT_INPUT
             else:
@@ -436,6 +443,16 @@ class CocosView(object):
                 self._dialogue_buffer = []
             else:
                 self._state = CocosView.IDLE
+
+    def _check_delete_queue(self):
+        while self._delete_queue:
+            sprite = self._delete_queue.pop(0)
+            sprite.kill()
+
+    def _check_display_queue(self):
+        while self._display_queue:
+            sprite, z_value = self._display_queue.pop(0)
+            self._image_layer.add(sprite, z=z_value)
 
     def _init_interface(self):
         self._scene = cocos.scene.Scene()
