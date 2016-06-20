@@ -306,6 +306,8 @@ class CocosView(object):
         self._background = None
         self._ui_layer = None
         self._image_layer = None
+        self._menu = None
+        self._choice = None
         self._delete_queue = []
         self._display_queue = []
         self._dialogue_dirty = False
@@ -398,6 +400,21 @@ class CocosView(object):
         for command in commands:
             command.execute()
 
+    def display_choices(self, choices):
+        self._state = CocosView.GET_CHOICE
+        self._refresh_menu()
+        choice_items = []
+        for index, text in enumerate(choices):
+            # counting in NMF starts at one, not zero, so we have to add one
+            # to make up the difference
+            callback = lambda: self._set_choice(index + 1)
+            choice_items.append(cocos.menu.MenuItem(text, callback))
+        self._menu.create_menu(choice_items)
+        self._show_menu()
+
+    def get_selected_choice(self):
+        return self._choice
+
     def mainloop(self, runtime):
         mixer.init()
         director.init(width=CocosView.WIDTH, height=CocosView.HEIGHT, caption=CocosView.TITLE)
@@ -453,6 +470,25 @@ class CocosView(object):
         while self._display_queue:
             sprite, z_value = self._display_queue.pop(0)
             self._image_layer.add(sprite, z=z_value)
+
+    def _refresh_menu(self):
+        if self._menu is not None:
+            self._menu.kill()
+        self._menu = cocos.menu.Menu()
+        self._menu.font_item["font_size"] = 16
+        self._menu.font_item_selected["font_size"] = 24
+
+    def _hide_menu(self):
+        if self._menu in self._scene:
+            self._menu.kill()
+
+    def _show_menu(self):
+        self._scene.add(self._menu)
+
+    def _set_choice(self, choice_index):
+        self._choice = choice_index
+        self._hide_menu()
+        self._state = CocosView.IDLE
 
     def _init_interface(self):
         self._scene = cocos.scene.Scene()
