@@ -509,7 +509,6 @@ class CocosView(object):
                                              width=CocosView.WIDTH - 100,
                                              multiline=True)
         self._dialogue_box.position = (20, 80)
-        self._dialogue_box.element.text = "Some test text.\nSome more."
         self._ui_layer.add(self._dialogue_box)
         self._scene.add(self._ui_layer)
 
