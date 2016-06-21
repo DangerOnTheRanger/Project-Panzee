@@ -364,13 +364,19 @@ class CocosView(object):
             self.remove_avatar(self.get_speaker())
         image = pyglet.image.load(avatar_path)
         sprite = cocos.sprite.Sprite(image)
+        self._avatars[self.get_speaker()] = sprite
         if old_position:
-            sprite.position = old_position
+            old_x = old_position[0]
+            if old_x < CocosView.WIDTH / 2:
+                self.set_avatar_position(self.get_speaker(), "left")
+            elif old_x > CocosView.WIDTH / 2:
+                self.set_avatar_position(self.get_speaker(), "right")
+            else:
+                self.set_avatar_position(self.get_speaker(), "center")
         else:
             sprite.position = (CocosView.WIDTH / 2, sprite.height / 2)
-        self._avatars[self.get_speaker()] = sprite
-        if already_displaying:
-            self._display_queue.append((sprite, 0))
+            if already_displaying:
+                self._display_queue.append((sprite, 0))
 
     def remove_avatar(self, avatar):
         self._delete_queue.append(self._avatars[avatar])
