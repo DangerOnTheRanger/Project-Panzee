@@ -1,8 +1,0 @@
-[actor Floyd]
-[set flag 1]
-Let's transition to a scene.
-[scene test/nmfe_test_data/test_scene_pt_2]
-This is Floyd speaking again.
-[if flag 2]
-The other scene set a flag.
-[endif]

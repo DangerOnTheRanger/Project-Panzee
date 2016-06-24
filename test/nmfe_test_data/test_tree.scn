@@ -1,8 +1,0 @@
-[tree choice]
-[leaf Test choice - spaces joined]
-[leaf 2nd choice - numbers allowed]
-[leaf 3rd choice: Everything but brackets allowed, basically]
-[endtree]
-[if choice 3]
-Excellent choice.
-[endif]
