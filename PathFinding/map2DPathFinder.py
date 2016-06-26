@@ -19,7 +19,7 @@ class pathFinder(object):
             self.grid.append(list())
             for x in range(0,len(self.map.grid[y])):
                 self.grid[y].append(None)
-    def getHeuristic(self, x,y, x2,y2):
+    def getGridDis(self, x,y, x2,y2):
         return (abs(y-y2)+abs(x-x2))
     def getTerrianCostInLine(self, x,y, x2,y2):
         cost=0
@@ -34,8 +34,42 @@ class pathFinder(object):
                 y-=1
             cost+=self.map.getCost(x,y)
         return cost
-    def getTotalCost(self,x,y,x2,y2,moves):
-        return self.getHeuristic(x,y,x2,y2)
+
+    def getTerrianCostAndDiagonalDisInLine(self, x,y, x2,y2):
+        cost=0
+        while(not (x==x2 and y==y2)):
+            if(x<x2):
+                x+=1
+            elif(x>x2):
+                x-=1
+            if(y<y2):
+                y+=1
+            elif(y>y2):
+                y-=1
+            cost+=self.map.getCost(x,y)+1
+        return cost
+
+    def getDiagnolDis(self, x,y, x2,y2):
+        cost=0
+        while(not (x==x2 and y==y2)):
+            if(x<x2):
+                x+=1
+            elif(x>x2):
+                x-=1
+            if(y<y2):
+                y+=1
+            elif(y>y2):
+                y-=1
+            cost+=1
+        return cost
+
+    def getTotalCost(self,x,y,x2,y2,moves,mode):
+        if(mode==pathFinder.modeGrid):
+            return self.getGridDis(x,y,x2,y2)+self.getTerrianCostInLine(x,y,x2,y2)
+        elif(mode==pathFinder.modeDiagonals):
+            return self.getDiagnolDis(x,y,x2,y2)+self.getTerrianCostAndDiagonalDisInLine(x,y,x2,y2)
+        elif(mode==pathFinder.modeGridAndDiagonals):
+            return self.getGridDis(x,y,x2,y2)+self.getDiagnolDis(x,y,x2,y2)
     def withinBounds(self, x,y):
         return (0<=y<len(self.grid) and 0<=x<len(self.grid[y]))
     def isOpen(self,x,y,x2,y2,moves):
@@ -44,7 +78,7 @@ class pathFinder(object):
         else:
             return None
 
-    def findPath(self, startX, startY, endX, endY, mode=modeGrid):
+    def findPath(self, startX, startY, endX, endY, mode):
         self.initiateGrid()
         x=startX+0
         y=startY+0
@@ -53,7 +87,7 @@ class pathFinder(object):
         status = 0
         lastPath=-1
         deadEnd=0
-        tc = self.getTotalCost(x,y,endX,endY,0)
+        tc = self.getTotalCost(x,y,endX,endY,0,mode)
         #Run
         while(status==pathFinder.statusRunning):
             if(deadEnd==1):
@@ -85,7 +119,7 @@ class pathFinder(object):
                             up[2] = lastPath
                         else:
                             up[2] = lastPath+1
-                        up[3] = self.getTotalCost(up[0],up[1],endX,endY,up[2])
+                        up[3] = self.getTotalCost(up[0],up[1],endX,endY,up[2],mode)
                         if(self.isOpen(up[0],up[1],endX,endY,up[2])==True):
                             #print("Up:",up[3])
                             #print("UP")
@@ -96,7 +130,7 @@ class pathFinder(object):
                             right[2] = lastPath
                         else:
                             right[2] = lastPath+1
-                        right[3] = self.getTotalCost(right[0],right[1],endX,endY,right[2])
+                        right[3] = self.getTotalCost(right[0],right[1],endX,endY,right[2], mode)
                         if(self.isOpen(right[0],right[1],endX,endY,right[2])==True):
                             #print("Right:",right[3])
                             #print("RIGHT")
@@ -107,7 +141,7 @@ class pathFinder(object):
                             down[2] = lastPath
                         else:
                             down[2] = lastPath+1
-                        down[3] = self.getTotalCost(down[0],down[1],endX,endY,down[2])
+                        down[3] = self.getTotalCost(down[0],down[1],endX,endY,down[2], mode)
                         if(self.isOpen(down[0],down[1],endX,endY,down[2])==True):
                             #print("Down:",down[3])
                             #print("DOWN")
@@ -118,7 +152,7 @@ class pathFinder(object):
                             left[2] = lastPath
                         else:
                             left[2] = lastPath+1
-                        left[3] = self.getTotalCost(left[0],left[1],endX,endY,left[2])
+                        left[3] = self.getTotalCost(left[0],left[1],endX,endY,left[2], mode)
                         if(self.isOpen(left[0],left[1],endX,endY,left[2])==True):
                             #print("Left:",left[3])
                             #print("LEFT")
@@ -131,7 +165,7 @@ class pathFinder(object):
                             upRight[2]= lastPath
                         else:
                             upRight[2]= lastPath+1
-                        upRight[3] = self.getTotalCost(upRight[0],upRight[1],endX,endY,upRight[2])
+                        upRight[3] = self.getTotalCost(upRight[0],upRight[1],endX,endY,upRight[2], mode)
                         if(self.isOpen(upRight[0],upRight[1],endX,endY,upRight[2])==True):
                             #print("upRight:",upRight[3])
                             #print("UP RIGHT")
@@ -142,7 +176,7 @@ class pathFinder(object):
                             rightDown[2] = lastPath
                         else:
                             rightDown[2] = lastPath+1
-                        rightDown[3] = self.getTotalCost(rightDown[0],rightDown[1],endX,endY,rightDown[2])
+                        rightDown[3] = self.getTotalCost(rightDown[0],rightDown[1],endX,endY,rightDown[2], mode)
                         if(self.isOpen(rightDown[0],rightDown[1],endX,endY,rightDown[2])==True):
                             #print("RIGHT DOWN")
                             dirs.append(rightDown)
@@ -152,7 +186,7 @@ class pathFinder(object):
                             downLeft[2] = lastPath
                         else:
                             downLeft[2] = lastPath+1
-                        downLeft[3] = self.getTotalCost(downLeft[0],downLeft[1],endX,endY,downLeft[2])
+                        downLeft[3] = self.getTotalCost(downLeft[0],downLeft[1],endX,endY,downLeft[2], mode)
                         if(self.isOpen(downLeft[0],downLeft[1],endX,endY,downLeft[2])==True):
                             #print("DOWN LEFT")
                             dirs.append(downLeft)
@@ -162,7 +196,7 @@ class pathFinder(object):
                             leftUp[2] = lastPath
                         else:
                             leftUp[2] = lastPath+1
-                        leftUp[3] = self.getTotalCost(leftUp[0],leftUp[1],endX,endY,leftUp[2])
+                        leftUp[3] = self.getTotalCost(leftUp[0],leftUp[1],endX,endY,leftUp[2], mode)
                         if(self.isOpen(leftUp[0],leftUp[1],endX,endY,leftUp[2])==True):
                             #print("LEFT UP")
                             dirs.append(leftUp)
@@ -201,6 +235,12 @@ class pathFinder(object):
                 print()
             print()
             print("tile [",x,",",y,"], total cost = [",self.grid[y][x],"]",sep="")
+
+    def getTerrianCostInPath(self, path):
+        cost=0
+        for y in path:
+            cost+=self.map.getCost(y[0],y[1])
+        return cost
 
     def printPathMap(self, path):
         temp=False

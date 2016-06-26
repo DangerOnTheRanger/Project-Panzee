@@ -71,9 +71,9 @@ class map2D(object):
                 print(x.icon,end="")
             print()
         print()
-    def findPath(self, startX, startY, endX, endY):
+    def findPath(self, startX, startY, endX, endY,mode=pathFinder.modeGrid):
         if(self.withinBounds(startX,startY) and self.withinBounds(endX,endY) and self.isPassable(startX,startY) and self.isPassable(endX,endY)):
-            return self.pathFinder.findPath(startX, startY, endX, endY)
+            return self.pathFinder.findPath(startX, startY, endX, endY,mode)
         else:
             return None
     def printPathMap(self, path):
