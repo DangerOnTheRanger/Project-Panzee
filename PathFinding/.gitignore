@@ -1,6 +1,4 @@
 # Ignore Python bytecode
 *.pyc
-TEST.cmd
-test.py
 # Ignore IDE/py.test-generated cache files
 .cache
