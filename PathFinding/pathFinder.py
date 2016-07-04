@@ -91,9 +91,12 @@ class path_finder(object):
     def get_tile_with_lowest_fscore(self):
         temp2 = None
         for temp in self.tiles:
-            if(temp.isOpen and not temp.isClosed and (temp2 == None or temp.fScore<temp2.fScore)):
+            if(temp.isOpen and not temp.isClosed and (temp2 == None or temp.fScore<=temp2.fScore)):
                 temp2 = temp
         return temp2
+
+    def heuristic_cost_estimate(self, start, goal):
+        return self.getDis(start,goal)
 
     def showPath(self):
         for temp in self.path:
@@ -116,36 +119,44 @@ class path_finder(object):
     def findPath(self, start, goal, debug):
         temp = tile(start[0],start[1],self)
         temp.gScore=0
-        temp.fScore=self.getDis([start[0],start[1]],[goal[0],goal[1]])
+        temp.fScore=self.heuristic_cost_estimate([start[0],start[1]],[goal[0],goal[1]])
         temp.isOpen=True
         self.tiles.append(temp)
         while(self.countOpenTiles()>0 and self.killSwitch==False):
             current = self.get_tile_with_lowest_fscore()
+            if(current==None):
+                break
             if(debug):
                 self.grid[current.y][current.x].set_active()
                 sleep(.04)
+
             if(current.x == goal[0] and
                current.y == goal[1]):
                 return self.reconstruct_path(current,start)
-                #raise Exception("NOT FINISHED, But path found, needs reconstructing though...")
+
             current.isOpen=False
             current.isClosed=True
             for temp in current.neighbors:
                 temp2 = self.is_in_tiles(temp[0],temp[1])
                 tentative_gScore = current.gScore + self.getDis([current.x,current.y], [temp[0],temp[1]])
+
                 if(temp2==None):
                     temp2 = tile(temp[0],temp[1],self)
-                    temp2.isOpen=True
                     self.tiles.append(temp2)
-                else:
-                    if(self.isClosed(temp[0],temp[1])):
+
+                if(self.isClosed(temp[0],temp[1])):
+                    if(temp2.fScore >= current.fScore):
                         continue
-                    if(not temp2.isOpen): # Discover a new node
+                    else:
                         temp2.isOpen=True
-                    elif(tentative_gScore >= temp2.gScore):
-                        continue
+
+                if(not temp2.isOpen): # Discover a new node
+                    temp2.isOpen=True
+                elif(tentative_gScore >= temp2.gScore):
+                    continue
+
                 # This path is the best until now. Record it!
                 temp2.cameFrom = current
                 temp2.gScore = tentative_gScore
-                temp2.fScore = temp2.gScore + self.getDis([temp2.x,temp2.y],[goal[0],goal[1]])
+                temp2.fScore = temp2.gScore + self.heuristic_cost_estimate([temp2.x,temp2.y],[goal[0],goal[1]])
         return None

@@ -5,6 +5,10 @@ except ImportError:
     # for Python3
     from tkinter import *   ## notice here too
 
+import tkMessageBox
+import Tkinter
+import tkFileDialog
+
 from pathFinder import path_finder
 import threading
 import time
@@ -32,29 +36,39 @@ class Cell():
         self.fill= not self.fill'''
 
     def set_black(self):
+        if(self.fill==Cell.GOAL_COLOR or self.fill==Cell.START_COLOR):
+            return
         self.fill = Cell.EMPTY_COLOR_BORDER
         self.draw()
 
     def set_green(self):
         """ Switch if the cell is filled or not. """
         self.fill= Cell.FILLED_COLOR_BG
+        self.draw()
 
     def set_white(self):
         """ Switch if the cell is filled or not. """
         self.fill=Cell.EMPTY_COLOR_BG
+        self.draw()
 
     def set_start(self):
         self.fill=Cell.START_COLOR
+        self.draw()
 
     def set_goal(self):
         self.fill=Cell.GOAL_COLOR
+        self.draw()
 
     def set_active(self):
+        if(self.fill==Cell.GOAL_COLOR or self.fill==Cell.START_COLOR):
+            return
         if(self.active):
             self.fill=self.fill2
+            self.active=False
         else:
             self.fill2=self.fill
             self.fill=Cell.ACTIVE_COLOR
+            self.active=True
         self.draw()
 
     def is_passible(self):
@@ -121,8 +135,6 @@ class CellGrid(Canvas):
 
         self.draw()
 
-
-
     def draw(self):
         for row in self.grid:
             for cell in row:
@@ -153,6 +165,18 @@ class CellGrid(Canvas):
         if(self.pf.path):
             self.pf.showPath()
 
+    def eraseTrails(self):
+        for y in self.grid:
+            for x in y:
+                if(x.active):
+                    x.set_active()
+                elif(x.fill==Cell.EMPTY_COLOR_BORDER):
+                    x.set_white()
+
+    def drawAll(self):
+        for y in self.grid:
+            for x in y:
+                x.draw()
 
     def key(self, event):
         row, column = self._eventCoords(event)
@@ -164,23 +188,18 @@ class CellGrid(Canvas):
                     self.goal=None
                 cell = self.grid[row][column]
                 cell.set_white()
-                cell.draw()
             elif(event.char=='2'):
                 if(self.start!=None):
                     self.grid[self.start[1]][self.start[0]].set_white()
-                    self.grid[self.start[1]][self.start[0]].draw()
                 self.start = [column,row]
                 cell = self.grid[row][column]
                 cell.set_start()
-                cell.draw()
             elif(event.char=='3'):
                 if(self.goal!=None):
                     self.grid[self.goal[1]][self.goal[0]].set_white()
-                    self.grid[self.goal[1]][self.goal[0]].draw()
                 self.goal = [column,row]
                 cell = self.grid[row][column]
                 cell.set_goal()
-                cell.draw()
             elif(event.char=='\x1b'):
                 if(self.thread!=None and self.thread.isAlive()):
                     self.pf.kill()
@@ -195,13 +214,88 @@ class CellGrid(Canvas):
                 if(self.start!=None and self.goal!=None and (self.thread==None or not self.thread.isAlive())):
                     self.thread = threading.Thread(target=self.findPath, args=([False]))
                     self.thread.start()
+            elif(event.char=='e'):
+                self.eraseTrails()
+            elif(event.char=='s'):
+                f = tkFileDialog.asksaveasfile(mode='w', defaultextension=".txt")
+                if f is None: # asksaveasfile return `None` if dialog closed with "cancel".
+                    return
+                self.eraseTrails()
+                data = ""
+                data+=str(self.cellSize)
+                data+='\n'
+                for y in self.grid:
+                    for x in y:
+                        if(x.fill == Cell.START_COLOR):
+                            data+="X"
+                        elif(x.fill == Cell.GOAL_COLOR):
+                            data+="Z"
+                        elif(x.fill == Cell.FILLED_COLOR_BG):
+                            data+="#"
+                        elif(x.fill == Cell.EMPTY_COLOR_BG):
+                            data+="-"
+                    data+='\n'
+                f.write(data)
+                f.close()
+            elif(event.char=='l'):
+                f = tkFileDialog.askopenfile(mode='r', defaultextension=".txt")
+                if f is None: # asksaveasfile return `None` if dialog closed with "cancel".
+                    return
+                grid=[]
+                width=-1
+                height=-1
+                num = -1
+                try:
+                    cellSize = int(float(f.readline()))
+                    for line in f:
+                        height+=1
+                        num=-1
+                        if(num > width):
+                            width = num
+                        grid.append([])
+                        for char in line:
+                            num+=1
+                            tile = Cell(self, num, height, cellSize)
+                            if(char=="#"):
+                                tile.fill = Cell.FILLED_COLOR_BG
+                            elif(char=="-"):
+                                tile.fill = Cell.EMPTY_COLOR_BG
+                            elif(char=="X"):
+                                tile.fill = Cell.START_COLOR
+                                start = [num,height]
+                            elif(char=="Z"):
+                                tile.fill = Cell.GOAL_COLOR
+                                goal = [num,height]
+                            grid[height].append(tile)
+                            #print(height, num,char)
+                            #time.sleep(1)
+                        '''for y in grid:
+                            for x in y:
+                                print(x.abs,x.ord,x.fill)
+                        exit(2)'''
+                    self.cellSize = cellSize
+                    self.grid = grid
+                    self.start = start
+                    self.goal = goal
+                    self.drawAll()
+                except:
+                    print "ERROR: Loading map file",sys.exc_info()[0]
+                    top = Toplevel()
+                    top.title("ERROR")
+                    msg = Message(top, text="ERROR loading file")
+                    msg.pack()
+                    button = Button(top, text="Ok", command=top.destroy)
+                    button.pack()
+                    raise
+                f.close()
             elif(event.char=='c'):
                 for y in self.grid:
                     for x in y:
                         if(x.active):
                             x.set_active()
                         x.set_white()
-                        x.draw()
+                self.start=None
+                self.goal=None
             elif(event.char=='k'):
                 self.pf.kill()
                 self.thread.join(1)
@@ -214,14 +308,12 @@ class CellGrid(Canvas):
         if(column<len(self.grid) and row<len(self.grid[column])):
             cell = self.grid[row][column]
             cell.set_green()
-            cell.draw()
 
     def handleMouseClick2(self, event):
         row, column = self._eventCoords(event)
         if(column<len(self.grid) and row<len(self.grid[column])):
             cell = self.grid[row][column]
             cell.set_white()
-            cell.draw()
 
     def handleMouseMotion(self, event):
         row, column = self._eventCoords(event)
@@ -229,7 +321,6 @@ class CellGrid(Canvas):
             cell = self.grid[row][column]
 
             cell.set_green()
-            cell.draw()
 
     def handleMouseMotion2(self, event):
         row, column = self._eventCoords(event)
@@ -237,4 +328,3 @@ class CellGrid(Canvas):
             cell = self.grid[row][column]
 
             cell.set_white()
-            cell.draw()

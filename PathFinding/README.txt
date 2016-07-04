@@ -12,6 +12,9 @@ run test.py
 enter - run path finder with debugging enabled
 tab - run path finder with debugging disabled
 k - kills the path finder
+s - saves current map to a specified file
+l - loads a map from a specified file
+e - erases/reverts trails, [debugging highlighted tiles, fastest path highlighted trail/tiles]
 escape - exits program, and kills the path finder if running
 
 #Mouse
