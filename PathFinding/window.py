@@ -13,6 +13,66 @@ from pathFinder import path_finder
 import threading
 import time
 
+class windowChangeGrid():
+    def __int__(self):
+        self.toplevel = None
+        self.running = False
+        self.returnData = None
+
+    def ask(self):
+        if(True):
+            self.toplevel = Toplevel()
+            self.label1 = Label(self.toplevel, text="set width", height=0, width=100)
+            self.label1.pack()
+            self.e = Entry(self.toplevel)
+            self.e.pack()
+            self.e.delete(0,END)
+            self.e.insert(0, 20)
+            self.label2 = Label(self.toplevel, text="set height", height=0, width=100)
+            self.label2.pack()
+            self.e2 = Entry(self.toplevel)
+            self.e2.pack()
+            self.e2.delete(0,END)
+            self.e2.insert(0, 20)
+            self.label3 = Label(self.toplevel, text="set cellSize", height=0, width=100)
+            self.label3.pack()
+            self.e3 = Entry(self.toplevel)
+            self.e3.pack()
+            self.e3.delete(0,END)
+            self.e3.insert(0, 40)
+            self.enter = Button(self.toplevel, text="Enter", width=20, command=self.funcEnter)
+            self.enter.pack()
+            self.quit = Button(self.toplevel, text="Quit", width=20, command=self.funcQuit)
+            self.quit.pack()
+            self.returnData=None
+            self.toplevel.mainloop()
+            self.toplevel.destroy()
+            self.running=False
+            return self.returnData
+
+    def funcEnter(self):
+        self.response=1
+        try:
+            width = self.e.getint()
+            height = self.e2.getint()
+            cellSize = self.e3.getint()
+            self.returnData = [width,height,cellSize]
+            #self.toplevel.quit()
+            self.toplevel.destroy()
+        except:
+            self.returnData = None
+            tkMessageBox.showerror(
+                "ERROR: ChangeGrid",
+                "ERROR: Value(s) not intager\n"
+            )
+            print("ERROR:", sys.exc_info()[0])
+            raise
+
+    def funcQuit(self):
+        self.returnData = None
+        self.toplevel.destroy()
+
+
 class Cell():
     FILLED_COLOR_BG = "green"
     EMPTY_COLOR_BG = "white"
@@ -99,6 +159,7 @@ class CellGrid(Canvas):
         self.goal=None
         self.cellSize = cellSize
         self.thread=None
+        self.windowChangeGridInstance = windowChangeGrid()
 
         self.grid = []
         for row in range(rowNumber):
@@ -145,25 +206,27 @@ class CellGrid(Canvas):
         column = int(event.x / self.cellSize)
         return row, column
 
-    def findPath(self,debug=False):
+    def findPath(self,showPath=False,showSearchedTiles=False, showTime=False, debugSleep=0):
         self.pf = path_finder(self.grid)
-        if(debug):
-            self.pf.findPath(self.start,self.goal,True)
-            if(self.pf.path):
-                print("DONE! in <Timer disabled, debug mode ON> with moves ", len(self.pf.path), ", ", self.pf.path)
-            else:
-                print("No Path Found! in <Timer disabled, debug mode ON> ")
-        else:
+        if(showTime==True):
             timer = time.time()
-            self.pf.findPath(self.start,self.goal,False)
+            self.pf.findPath(self.start,self.goal,showSearchedTiles, debugSleep)
             timer2 = time.time()
             if(self.pf.path):
-                print("Found Path! in <", (timer2-timer), "> with moves ", len(self.pf.path), ", ", self.pf.path)
-            else:
-                print("No Path found! in <", (timer2-timer), ">")
-
-        if(self.pf.path):
-            self.pf.showPath()
+                print("Found path in ["+str(timer2-timer)+"], with moves ["+str(len(self.pf.path))+"]\n")
+                if(showPath):
+                    self.pf.showPath()
+        elif(showTime==None):
+            timer = time.time()
+            self.pf.findPath(self.start,self.goal,showSearchedTiles, debugSleep)
+            timer2 = time.time()
+            if(showPath and self.pf.path):
+                self.pf.showPath()
+            return (timer2 - timer)
+        else:
+            self.pf.findPath(self.start,self.goal,showSearchedTiles, debugSleep)
+            if(showPath and self.pf.path):
+                self.pf.showPath()
 
     def eraseTrails(self):
         for y in self.grid:
@@ -177,6 +240,50 @@ class CellGrid(Canvas):
         for y in self.grid:
             for x in y:
                 x.draw()
+
+    def ChangeGridViaWindow(self):
+        self.windowChangeGridInstance.ask()
+        if(temp!=None):
+            width,height,cellSize = temp
+            grid = []
+            for row in range(width):
+                grid.append([])
+                for column in range(height):
+                    grid[row].append(Cell(self, column, row, cellSize))
+                #grid.append(line)
+            self.cellSize = cellSize
+            self.grid = grid
+            self.drawAll()
+            print("HERE")
+
+    def saveToFile(self,file,debug=False):
+        self.eraseTrails()
+        data = ""
+        data+=str(self.cellSize)
+        data+='\n'
+        for y in self.grid:
+            for x in y:
+                if(x.fill == Cell.START_COLOR):
+                    data+="X"
+                elif(x.fill == Cell.GOAL_COLOR):
+                    data+="Z"
+                elif(x.fill == Cell.FILLED_COLOR_BG):
+                    data+="#"
+                elif(x.fill == Cell.EMPTY_COLOR_BG):
+                    data+="-"
+            data+='\n'
+        if(debug):
+            return data
+        else:
+            file.write(data)
+            file.close()
+
+    def switchStartGoal(self):
+        self.grid[self.start[1]][self.start[0]].set_goal()
+        self.grid[self.goal[1]][self.goal[0]].set_start()
+        temp = self.start
+        self.start = self.goal
+        self.goal = temp
 
     def key(self, event):
         row, column = self._eventCoords(event)
@@ -208,41 +315,56 @@ class CellGrid(Canvas):
                 exit(0)
             elif(event.char=='\r'):
                 if(self.start!=None and self.goal!=None and (self.thread==None or not self.thread.isAlive())):
-                    self.thread = threading.Thread(target=self.findPath, args=([True]))
+                    self.thread = threading.Thread(target=self.findPath, args=([True,True,True,0.04]))
                     self.thread.start()
             elif(event.char=='\t'):
                 if(self.start!=None and self.goal!=None and (self.thread==None or not self.thread.isAlive())):
-                    self.thread = threading.Thread(target=self.findPath, args=([False]))
+                    self.thread = threading.Thread(target=self.findPath, args=([True,True,True,0]))
                     self.thread.start()
             elif(event.char=='e'):
                 self.eraseTrails()
+            elif(event.char=='i'):
+                self.ChangeGridViaWindow()
+            elif(event.char=='b'):
+                if(self.start!=None and self.goal!=None and (self.thread==None or not self.thread.isAlive())):
+                    self.thread = threading.Thread(target=self.findPath, args=([True,True,True,0]))
+                    self.thread.start()
+                    self.switchStartGoal()
+                    self.thread2 = threading.Thread(target=self.findPath, args=([True,True,True,0]))
+                    self.thread2.start()
+            elif(event.char=='t'):
+                benchTimes = []
+                least = [0,float('inf')]
+                max = [0,0]
+                average = 0
+                toCycle = 100
+                for cycles in range(1,toCycle):
+                    temp = self.findPath(False,False,None,0)
+                    benchTimes.append(temp)
+                    if(temp > max[1]):
+                        max = [cycles-1, temp]
+                    if(temp < least[1]):
+                        least = [cycles-1, temp]
+                    average+=temp
+                average=(average/toCycle)
+                f = open("benchmark.txt", "w")
+                data = self.saveToFile(f,True)
+                f.writelines(["benchmark", '\n',"fastest time", str(least[1]), '\n',"slowest time", str(max[1]), '\n', "average time", str(average), '\n',data])
+                f.close()
+
+            elif(event.char=='r'):
+                self.switchStartGoal()
             elif(event.char=='s'):
                 f = tkFileDialog.asksaveasfile(mode='w', defaultextension=".txt")
                 if f is None: # asksaveasfile return `None` if dialog closed with "cancel".
                     return
-                self.eraseTrails()
-                data = ""
-                data+=str(self.cellSize)
-                data+='\n'
-                for y in self.grid:
-                    for x in y:
-                        if(x.fill == Cell.START_COLOR):
-                            data+="X"
-                        elif(x.fill == Cell.GOAL_COLOR):
-                            data+="Z"
-                        elif(x.fill == Cell.FILLED_COLOR_BG):
-                            data+="#"
-                        elif(x.fill == Cell.EMPTY_COLOR_BG):
-                            data+="-"
-                    data+='\n'
-                f.write(data)
-                f.close()
+                self.saveToFile(f)
             elif(event.char=='l'):
                 f = tkFileDialog.askopenfile(mode='r', defaultextension=".txt")
                 if f is None: # asksaveasfile return `None` if dialog closed with "cancel".
                     return
                 grid=[]
-                width=-1
+                width = -1
                 height=-1
                 num = -1
                 try:
@@ -254,6 +376,8 @@ class CellGrid(Canvas):
                             width = num
                         grid.append([])
                         for char in line:
+                            if(char=='\n'):
+                                continue
                             num+=1
                             tile = Cell(self, num, height, cellSize)
                             if(char=="#"):

@@ -11,9 +11,6 @@ from window import CellGrid
 from window import Cell
 from pathFinder import path_finder
 
-
-
-
 if __name__ == "__main__" :
     app = Tk()
     grid = CellGrid(app, 20, 20, 40)

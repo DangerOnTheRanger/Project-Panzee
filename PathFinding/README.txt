@@ -14,7 +14,12 @@ tab - run path finder with debugging disabled
 k - kills the path finder
 s - saves current map to a specified file
 l - loads a map from a specified file
+c - clears the map, set's all tiles to empty/passible (white) and removes start and goal.
 e - erases/reverts trails, [debugging highlighted tiles, fastest path highlighted trail/tiles]
+i - (Doesn't work) new clean map with specified paramiters  
+b - "bi" directional path finding (not really bi-directional. meant to find, in witch direction the fastest path is found, from start to goal, or goal to start)
+t - benchmark test of pathfinding, 100 cycles, and saves to file "benchmark.txt"
+r - swaps start and goal location.
 escape - exits program, and kills the path finder if running
 
 #Mouse

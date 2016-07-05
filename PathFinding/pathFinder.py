@@ -116,7 +116,7 @@ class path_finder(object):
         #print(total_path, len(total_path))
         self.path = total_path
 
-    def findPath(self, start, goal, debug):
+    def findPath(self, start, goal, debug,debugSleep):
         temp = tile(start[0],start[1],self)
         temp.gScore=0
         temp.fScore=self.heuristic_cost_estimate([start[0],start[1]],[goal[0],goal[1]])
@@ -128,7 +128,8 @@ class path_finder(object):
                 break
             if(debug):
                 self.grid[current.y][current.x].set_active()
-                sleep(.04)
+                if(debugSleep>0):
+                    sleep(debugSleep)
 
             if(current.x == goal[0] and
                current.y == goal[1]):
